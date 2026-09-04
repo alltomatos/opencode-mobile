@@ -14,12 +14,43 @@ export type Session = {
   };
 };
 
+// Subconjunto de UserMessage | AssistantMessage — só os campos usados
+// pela tela de chat.
+export type Message = {
+  id: string;
+  sessionID: string;
+  role: 'user' | 'assistant';
+  time: {
+    created: number;
+    completed?: number;
+  };
+};
+
+// TextPart é o único tipo de parte que o app renderiza por enquanto;
+// os outros (tool, reasoning, file, etc.) passam pelo formato genérico
+// abaixo pra não quebrar ao receber algo que ainda não sabe desenhar.
+export type TextPart = {
+  id: string;
+  messageID: string;
+  type: 'text';
+  text: string;
+};
+
+export type Part = TextPart | { id: string; messageID: string; type: string };
+
+export type MessageWithParts = {
+  info: Message;
+  parts: Part[];
+};
+
 export type SessionEvent =
   | { type: 'session.created'; properties: { sessionID: string; info: Session } }
   | { type: 'session.updated'; properties: { sessionID: string; info: Session } }
   | { type: 'session.deleted'; properties: { sessionID: string; info: Session } }
-  // Qualquer outro tipo de evento do fork (message.*, permission.*, etc.)
-  // — o app ignora por enquanto, mas não deve quebrar ao recebê-los.
+  | { type: 'message.updated'; properties: { sessionID: string; info: Message } }
+  | { type: 'message.part.updated'; properties: { sessionID: string; part: Part } }
+  // Qualquer outro tipo de evento do fork (permission.*, etc.) — o app
+  // ignora por enquanto, mas não deve quebrar ao recebê-los.
   | { type: string; properties?: unknown };
 
 function authedUrl(server: ServerConnection, token: string, path: string): string {
@@ -34,6 +65,39 @@ export async function listSessions(server: ServerConnection, token: string): Pro
     throw new Error(`GET /session falhou: ${res.status}`);
   }
   return (await res.json()) as Session[];
+}
+
+export async function listMessages(
+  server: ServerConnection,
+  token: string,
+  sessionID: string
+): Promise<MessageWithParts[]> {
+  const res = await fetch(authedUrl(server, token, `/session/${sessionID}/message`));
+  if (!res.ok) {
+    throw new Error(`GET /session/${sessionID}/message falhou: ${res.status}`);
+  }
+  return (await res.json()) as MessageWithParts[];
+}
+
+// POST /session/:id/message (síncrono — segura a conexão até a resposta
+// completar). docs/prd/mobile-api-reference.md §5.1 sugere prompt_async
+// pra não travar a UI numa conexão HTTP longa; fica pra quando a tela
+// precisar de progresso incremental via SSE em vez de aguardar aqui.
+export async function sendPrompt(
+  server: ServerConnection,
+  token: string,
+  sessionID: string,
+  text: string
+): Promise<MessageWithParts> {
+  const res = await fetch(authedUrl(server, token, `/session/${sessionID}/message`), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ parts: [{ type: 'text', text }] }),
+  });
+  if (!res.ok) {
+    throw new Error(`POST /session/${sessionID}/message falhou: ${res.status}`);
+  }
+  return (await res.json()) as MessageWithParts;
 }
 
 // Parser mínimo de Server-Sent Events sobre o streaming reader do

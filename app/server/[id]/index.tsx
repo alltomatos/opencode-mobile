@@ -1,10 +1,10 @@
-import { router, useLocalSearchParams } from 'expo-router';
+import { Link, router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { Button, FlatList, StyleSheet, Text, View } from 'react-native';
+import { Button, FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { listSessions, Session, subscribeEvents } from '../../src/lib/api';
-import { getServerToken, listServers, removeServer, ServerConnection } from '../../src/lib/servers';
+import { listSessions, Session, subscribeEvents } from '../../../src/lib/api';
+import { getServerToken, listServers, removeServer, ServerConnection } from '../../../src/lib/servers';
 
 export default function ServerSessionsScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -89,10 +89,12 @@ export default function ServerSessionsScreen() {
           keyExtractor={(item) => item.id}
           ListEmptyComponent={<Text style={styles.placeholder}>Nenhuma sessão ainda.</Text>}
           renderItem={({ item }) => (
-            <View style={styles.row}>
-              <Text style={styles.rowTitle}>{item.title || item.id}</Text>
-              <Text style={styles.rowMeta}>{item.directory}</Text>
-            </View>
+            <Link href={`/server/${id}/session/${item.id}`} asChild>
+              <Pressable style={styles.row}>
+                <Text style={styles.rowTitle}>{item.title || item.id}</Text>
+                <Text style={styles.rowMeta}>{item.directory}</Text>
+              </Pressable>
+            </Link>
           )}
         />
       )}
