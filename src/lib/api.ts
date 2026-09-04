@@ -216,21 +216,50 @@ export async function listProjects(server: ServerConnection, token: string): Pro
   return (await res.json()) as Project[];
 }
 
-// "Adicionar projeto" não é um endpoint dedicado — GET /project (a
-// doc chama de "list of projects that have been opened") mostra que
-// um projeto vira conhecido do servidor simplesmente por alguém
-// apontar `directory` numa chamada roteada por workspace (mesmo
-// WorkspaceRoutingMiddleware de toda a API). GET /project/current com
-// o novo `directory` é a chamada mínima que "abre" um projeto novo.
-export async function openProject(server: ServerConnection, token: string, directory: string): Promise<Project> {
-  const url = new URL('/project/current', server.url);
+// Resolução de projeto por diretório é feita UMA VEZ e cacheada pra
+// sempre no processo do servidor (packages/opencode/src/project/
+// instance-store.ts) — não existe re-resolução automática. Uma pasta
+// consultada (por qualquer rota com `?directory=`) antes de virar um
+// repo git fica presa pro resto da vida do processo no projeto
+// "global" compartilhado, mesmo que você rode `git init` depois:
+// `GET /project/current` só LÊ o cache, nunca corrige.
+// `POST /project/git/init` é o único caminho que força reavaliação —
+// mas com uma ressalva: se o cache já tiver `vcs: "git"` (mesmo com o
+// `id` errado), o servidor acha que "já é git, nada a fazer" e nem
+// essa chamada corrige (packages/opencode/src/project/project.ts,
+// `initGit`: `if (input.project.vcs === "git") return input.project`).
+// Testado ao vivo: com uma pasta NUNCA antes tocada — mkdir + git init
+// + commit primeiro, depois o primeiro toque via `/project/git/init`
+// (nunca via GET /project/current) — o projeto resolve certo e
+// persiste. É exatamente o que o app desktop faz
+// (home-controller.ts: `project.add` chama `initGit` pra pasta nova).
+async function initGit(server: ServerConnection, token: string, directory: string): Promise<Project> {
+  const url = new URL('/project/git/init', server.url);
   url.searchParams.set('auth_token', token);
   url.searchParams.set('directory', directory);
-  const res = await fetch(url.toString());
+  const res = await fetch(url.toString(), { method: 'POST' });
   if (!res.ok) {
-    throw new Error(`GET /project/current falhou: ${res.status}`);
+    throw new Error(`POST /project/git/init falhou: ${await errorDetail(res)}`);
   }
   return (await res.json()) as Project;
+}
+
+export async function openProject(server: ServerConnection, token: string, directory: string): Promise<Project> {
+  const project = await initGit(server, token, directory);
+  // Se essa pasta já foi tocada antes (por esta app ou outra) sem ter
+  // git ainda, ficou presa pro resto da vida do processo no projeto
+  // "global" — `initGit` sozinho não corrige isso quando o cache já
+  // marca `vcs: "git"` (ver comentário acima). `POST /instance/dispose`
+  // derruba o cache daquele diretório especificamente; um `initGit`
+  // logo depois resolve do zero. Testado ao vivo: cura de fato.
+  if (project.id === 'global') {
+    const disposeUrl = new URL('/instance/dispose', server.url);
+    disposeUrl.searchParams.set('auth_token', token);
+    disposeUrl.searchParams.set('directory', directory);
+    await fetch(disposeUrl.toString(), { method: 'POST' });
+    return initGit(server, token, directory);
+  }
+  return project;
 }
 
 export async function listSessions(server: ServerConnection, token: string): Promise<Session[]> {
