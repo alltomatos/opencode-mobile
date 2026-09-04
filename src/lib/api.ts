@@ -8,10 +8,19 @@ export type Session = {
   id: string;
   title: string;
   directory: string;
+  parentID?: string;
   time: {
     created: number;
     updated: number;
   };
+};
+
+// GET /project — o campo do caminho da pasta é `worktree`, não
+// `directory` (conferido contra packages/schema/src/project.ts).
+export type Project = {
+  id: string;
+  worktree: string;
+  name?: string;
 };
 
 // Subconjunto de UserMessage | AssistantMessage — só os campos usados
@@ -115,10 +124,56 @@ export async function listAgents(server: ServerConnection, token: string): Promi
   return (await res.json()) as Agent[];
 }
 
+export async function listProjects(server: ServerConnection, token: string): Promise<Project[]> {
+  const res = await fetch(authedUrl(server, token, '/project'));
+  if (!res.ok) {
+    throw new Error(`GET /project falhou: ${res.status}`);
+  }
+  return (await res.json()) as Project[];
+}
+
 export async function listSessions(server: ServerConnection, token: string): Promise<Session[]> {
   const res = await fetch(authedUrl(server, token, '/session'));
   if (!res.ok) {
     throw new Error(`GET /session falhou: ${res.status}`);
+  }
+  return (await res.json()) as Session[];
+}
+
+// POST /session — a rota v1 ativa recebe `directory` como query param
+// (mesmo padrão de WorkspaceRoutingQuery usado em toda a API), não no
+// corpo — existe uma rota /api/session (v2) separada que usa
+// body.location.directory, mas essa é outra superfície que este app
+// não usa (mobile-api-reference.md documenta as rotas v1 como as
+// ativas — /session, /permission, /question).
+export async function createSession(
+  server: ServerConnection,
+  token: string,
+  directory: string,
+  agent?: string
+): Promise<Session> {
+  const url = new URL('/session', server.url);
+  url.searchParams.set('auth_token', token);
+  url.searchParams.set('directory', directory);
+  const res = await fetch(url.toString(), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(agent ? { agent } : {}),
+  });
+  if (!res.ok) {
+    throw new Error(`POST /session falhou: ${res.status}`);
+  }
+  return (await res.json()) as Session;
+}
+
+// GET /session/:id/children — sessões filhas (subagents), criadas
+// automaticamente pela tool `task` quando o agente delega trabalho
+// (packages/opencode/src/tool/task.ts). Não é algo que o usuário
+// dispara manualmente.
+export async function listChildren(server: ServerConnection, token: string, sessionID: string): Promise<Session[]> {
+  const res = await fetch(authedUrl(server, token, `/session/${sessionID}/children`));
+  if (!res.ok) {
+    throw new Error(`GET /session/${sessionID}/children falhou: ${res.status}`);
   }
   return (await res.json()) as Session[];
 }

@@ -1,9 +1,10 @@
-import { Stack, useLocalSearchParams } from 'expo-router';
+import { Link, Stack, useLocalSearchParams } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
 import {
   FlatList,
   KeyboardAvoidingView,
   Platform,
+  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -14,6 +15,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import {
   getSession,
+  listChildren,
   listMessages,
   listPermissions,
   listQuestions,
@@ -25,6 +27,7 @@ import {
   replyPermission,
   replyQuestion,
   sendPrompt,
+  Session,
   subscribeEvents,
 } from '../../../../src/lib/api';
 
@@ -66,6 +69,7 @@ export default function SessionChatScreen() {
   const [mode, setMode] = useState<Mode>('manual');
   const modeRef = useRef<Mode>('manual');
   modeRef.current = mode;
+  const [children, setChildren] = useState<Session[]>([]);
 
   useEffect(() => {
     listServers().then(async (servers) => {
@@ -91,6 +95,9 @@ export default function SessionChatScreen() {
     listQuestions(server, token)
       .then((all) => !cancelled && setQuestionQueue(all.filter((q) => q.sessionID === sessionId)))
       .catch(() => {});
+    listChildren(server, token, sessionId)
+      .then((data) => !cancelled && setChildren(data))
+      .catch(() => {});
 
     // Enquanto o POST de envio está em voo (rota síncrona), o texto do
     // assistente chega incrementalmente por aqui via message.part.updated
@@ -100,11 +107,19 @@ export default function SessionChatScreen() {
       try {
         for await (const event of subscribeEvents(server, token, controller.signal)) {
           if (cancelled) return;
-          if (event.type === 'session.updated') {
-            const { sessionID, info } = (
-              event as { properties: { sessionID: string; info: { title: string } } }
-            ).properties;
+          if (event.type === 'session.created' || event.type === 'session.updated') {
+            const { sessionID, info } = (event as { properties: { sessionID: string; info: Session } })
+              .properties;
             if (sessionID === sessionId) setSessionTitle(info.title);
+            // Subagent (criado pela tool `task` — ver
+            // docs/prd/mobile-app.md §3, item 2): parentID aponta pra
+            // cá, então some/atualiza na tira de workers.
+            if (info.parentID === sessionId) {
+              setChildren((prev) => {
+                const rest = prev.filter((c) => c.id !== info.id);
+                return [...rest, info];
+              });
+            }
           } else if (event.type === 'message.updated') {
             const { sessionID, info } = (event as { properties: { sessionID: string; info: Message } })
               .properties;
@@ -254,6 +269,21 @@ export default function SessionChatScreen() {
       keyboardVerticalOffset={insets.top}
     >
       <Stack.Screen options={{ title: headerTitle }} />
+
+      {children.length > 0 && (
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.childrenRow}>
+          {children.map((child) => (
+            <Link key={child.id} href={`/server/${id}/session/${child.id}`} asChild>
+              <TouchableOpacity style={styles.childChip}>
+                <Text style={styles.childChipLabel} numberOfLines={1}>
+                  {child.title || child.id}
+                </Text>
+              </TouchableOpacity>
+            </Link>
+          ))}
+        </ScrollView>
+      )}
+
       <FlatList
         ref={listRef}
         style={styles.list}
@@ -477,6 +507,28 @@ function createStyles(theme: Theme) {
       fontSize: 12,
       color: theme.textDim,
       marginTop: 2,
+    },
+    childrenRow: {
+      flexGrow: 0,
+      paddingVertical: 8,
+      paddingHorizontal: 12,
+      borderBottomWidth: StyleSheet.hairlineWidth,
+      borderBottomColor: theme.border,
+    },
+    childChip: {
+      maxWidth: 160,
+      marginRight: 8,
+      paddingHorizontal: 12,
+      paddingVertical: 6,
+      borderRadius: 14,
+      backgroundColor: theme.bgAlt,
+      borderWidth: 1,
+      borderColor: theme.border,
+    },
+    childChipLabel: {
+      fontSize: 12,
+      fontWeight: '600',
+      color: theme.textDim,
     },
     modeRow: {
       flexDirection: 'row',

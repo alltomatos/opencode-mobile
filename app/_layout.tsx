@@ -24,6 +24,7 @@ export default function RootLayout() {
         <Stack.Screen name="index" options={{ title: 'Servidores' }} />
         <Stack.Screen name="pair" options={{ title: 'Parear servidor', presentation: 'modal' }} />
         <Stack.Screen name="server/[id]/index" options={{ title: 'Sessões' }} />
+        <Stack.Screen name="server/[id]/new" options={{ title: 'Nova sessão', presentation: 'modal' }} />
         <Stack.Screen name="server/[id]/session/[sessionId]" options={{ title: 'Sessão' }} />
       </Stack>
     </SafeAreaProvider>

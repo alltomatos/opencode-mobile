@@ -88,7 +88,10 @@ export default function ServerSessionsScreen() {
         <Text style={styles.placeholder}>Carregando sessões…</Text>
       ) : (
         <FlatList
-          data={sessions ?? []}
+          // Subagents (parentID definido) aparecem dentro da sessão-mãe,
+          // não como item solto aqui — ver
+          // docs/prd/mobile-app.md §3, item 2.
+          data={(sessions ?? []).filter((s) => !s.parentID)}
           keyExtractor={(item) => item.id}
           ListEmptyComponent={<Text style={styles.placeholder}>Nenhuma sessão ainda.</Text>}
           renderItem={({ item }) => (
@@ -101,6 +104,10 @@ export default function ServerSessionsScreen() {
           )}
         />
       )}
+
+      <Link href={`/server/${id}/new`} style={styles.newLink}>
+        + Nova sessão
+      </Link>
 
       <Button
         title="Remover servidor"
@@ -162,6 +169,13 @@ function createStyles(theme: Theme) {
     rowMeta: {
       color: theme.textDim,
       marginTop: 2,
+    },
+    newLink: {
+      textAlign: 'center',
+      padding: 12,
+      fontSize: 15,
+      fontWeight: '600',
+      color: theme.accent,
     },
   });
 }
