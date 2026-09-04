@@ -1,7 +1,7 @@
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { router } from 'expo-router';
 import { useState } from 'react';
-import { Button, StyleSheet, Text, View } from 'react-native';
+import { Button, KeyboardAvoidingView, Platform, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import { addServer, parsePairingPayload, verifyServer } from '../src/lib/servers';
 
@@ -12,9 +12,11 @@ export default function PairScreen() {
   const [permission, requestPermission] = useCameraPermissions();
   const [status, setStatus] = useState<'scanning' | 'checking' | 'error'>('scanning');
   const [error, setError] = useState<string | null>(null);
+  const [manualPayload, setManualPayload] = useState('');
+  const [showManual, setShowManual] = useState(false);
 
-  async function handleScanned(data: string) {
-    if (status !== 'scanning') return;
+  async function pair(data: string) {
+    if (status === 'checking') return;
     setStatus('checking');
     setError(null);
     try {
@@ -26,7 +28,7 @@ export default function PairScreen() {
       const server = await addServer(payload);
       router.replace(`/server/${server.id}`);
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'QR code inválido.');
+      setError(e instanceof Error ? e.message : 'Payload inválido.');
       setStatus('error');
     }
   }
@@ -45,12 +47,35 @@ export default function PairScreen() {
   }
 
   return (
-    <View style={styles.container}>
-      <CameraView
-        style={StyleSheet.absoluteFill}
-        barcodeScannerSettings={{ barcodeTypes: ['qr'] }}
-        onBarcodeScanned={(result) => handleScanned(result.data)}
-      />
+    <KeyboardAvoidingView
+      style={styles.container}
+      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+    >
+      {!showManual && (
+        <CameraView
+          style={StyleSheet.absoluteFill}
+          barcodeScannerSettings={{ barcodeTypes: ['qr'] }}
+          onBarcodeScanned={(result) => pair(result.data)}
+        />
+      )}
+
+      {showManual && (
+        <View style={styles.manualForm}>
+          <Text style={styles.manualLabel}>Cole o payload de pareamento (JSON)</Text>
+          <TextInput
+            style={styles.manualInput}
+            multiline
+            autoCapitalize="none"
+            autoCorrect={false}
+            placeholder='{"v":1,"url":"...","token":"...","label":"..."}'
+            placeholderTextColor="#6b7280"
+            value={manualPayload}
+            onChangeText={setManualPayload}
+          />
+          <Button title="Parear" onPress={() => pair(manualPayload)} />
+        </View>
+      )}
+
       <View style={styles.overlay}>
         {status === 'checking' && <Text style={styles.overlayText}>Validando servidor…</Text>}
         {status === 'error' && (
@@ -59,8 +84,14 @@ export default function PairScreen() {
             <Button title="Tentar de novo" onPress={() => setStatus('scanning')} />
           </>
         )}
+        {status === 'scanning' && (
+          <Button
+            title={showManual ? 'Usar câmera' : 'Colar manualmente'}
+            onPress={() => setShowManual((v) => !v)}
+          />
+        )}
       </View>
-    </View>
+    </KeyboardAvoidingView>
   );
 }
 
@@ -73,6 +104,26 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     color: '#6b7280',
     padding: 24,
+  },
+  manualForm: {
+    flex: 1,
+    justifyContent: 'center',
+    padding: 24,
+    gap: 12,
+  },
+  manualLabel: {
+    color: '#fff',
+    fontSize: 14,
+  },
+  manualInput: {
+    minHeight: 120,
+    color: '#fff',
+    borderWidth: 1,
+    borderColor: '#374151',
+    borderRadius: 8,
+    padding: 12,
+    fontFamily: Platform.select({ ios: 'Menlo', android: 'monospace' }),
+    textAlignVertical: 'top',
   },
   overlay: {
     position: 'absolute',
