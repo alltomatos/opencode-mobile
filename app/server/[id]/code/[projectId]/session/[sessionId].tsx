@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from 'react';
 import {
   FlatList,
   KeyboardAvoidingView,
+  Modal,
   Platform,
   ScrollView,
   StyleSheet,
@@ -18,14 +19,17 @@ import {
   listChildren,
   listMessages,
   listPermissions,
+  listProviders,
   listQuestions,
   Message,
   MessageWithParts,
   Part,
   PermissionRequest,
+  ProviderList,
   QuestionRequest,
   replyPermission,
   replyQuestion,
+  SelectedModel,
   sendPrompt,
   Session,
   subscribeEvents,
@@ -74,6 +78,10 @@ export default function SessionChatScreen() {
   const modeRef = useRef<Mode>('manual');
   modeRef.current = mode;
   const [children, setChildren] = useState<Session[]>([]);
+  const [providers, setProviders] = useState<ProviderList | null>(null);
+  const [model, setModel] = useState<SelectedModel | null>(null);
+  const [showModePicker, setShowModePicker] = useState(false);
+  const [showModelPicker, setShowModelPicker] = useState(false);
 
   useEffect(() => {
     listServers().then(async (servers) => {
@@ -101,6 +109,19 @@ export default function SessionChatScreen() {
       .catch(() => {});
     listChildren(server, token, sessionId)
       .then((data) => !cancelled && setChildren(data))
+      .catch(() => {});
+    listProviders(server, token)
+      .then((data) => {
+        if (cancelled) return;
+        setProviders(data);
+        setModel((prev) => {
+          if (prev) return prev;
+          const firstConnected = data.connected[0];
+          const defaultModelID = firstConnected ? data.default[firstConnected] : undefined;
+          if (!firstConnected || !defaultModelID) return prev;
+          return { providerID: firstConnected, modelID: defaultModelID };
+        });
+      })
       .catch(() => {});
 
     // Enquanto o POST de envio está em voo (rota síncrona), o texto do
@@ -199,7 +220,7 @@ export default function SessionChatScreen() {
     setDraft('');
     setError(null);
     try {
-      await sendPrompt(server, token, sessionId, text, MODE_AGENT[mode]);
+      await sendPrompt(server, token, sessionId, text, MODE_AGENT[mode], model ?? undefined);
       const [fresh, session] = await Promise.all([
         listMessages(server, token, sessionId),
         getSession(server, token, sessionId),
@@ -245,6 +266,8 @@ export default function SessionChatScreen() {
   const pendingPermission = permissionQueue[0];
   const pendingQuestion = questionQueue[0];
   const headerTitle = sessionTitle || 'Sessão';
+  const selectedModelInfo = model && providers?.all.find((p) => p.id === model.providerID)?.models[model.modelID];
+  const modelLabel = selectedModelInfo?.name ?? 'Modelo padrão';
 
   if (server === undefined || messages === null) {
     return (
@@ -364,18 +387,6 @@ export default function SessionChatScreen() {
         </View>
       )}
 
-      <View style={styles.modeRow}>
-        {(['manual', 'plan', 'auto'] as Mode[]).map((m) => (
-          <TouchableOpacity
-            key={m}
-            style={[styles.modeChip, mode === m && styles.modeChipActive]}
-            onPress={() => setMode(m)}
-          >
-            <Text style={[styles.modeChipText, mode === m && styles.modeChipTextActive]}>{MODE_LABEL[m]}</Text>
-          </TouchableOpacity>
-        ))}
-      </View>
-
       <View style={[styles.composer, { paddingBottom: insets.bottom + 12 }]}>
         <TextInput
           style={styles.input}
@@ -393,6 +404,76 @@ export default function SessionChatScreen() {
           <Text style={styles.sendButtonText}>{sending ? '…' : 'Enviar'}</Text>
         </TouchableOpacity>
       </View>
+
+      <View style={[styles.dropdownRow, { paddingBottom: insets.bottom + 8 }]}>
+        <TouchableOpacity style={styles.dropdownChip} onPress={() => setShowModelPicker(true)}>
+          <Text style={styles.dropdownChipText} numberOfLines={1}>
+            {modelLabel}
+          </Text>
+          <Text style={styles.dropdownCaret}>▾</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.dropdownChip} onPress={() => setShowModePicker(true)}>
+          <Text style={styles.dropdownChipText}>{MODE_LABEL[mode]}</Text>
+          <Text style={styles.dropdownCaret}>▾</Text>
+        </TouchableOpacity>
+      </View>
+
+      <Modal visible={showModePicker} transparent animationType="fade" onRequestClose={() => setShowModePicker(false)}>
+        <TouchableOpacity style={styles.modalBackdrop} activeOpacity={1} onPress={() => setShowModePicker(false)}>
+          <View style={styles.modalSheet}>
+            {(['manual', 'plan', 'auto'] as Mode[]).map((m) => (
+              <TouchableOpacity
+                key={m}
+                style={styles.modalOption}
+                onPress={() => {
+                  setMode(m);
+                  setShowModePicker(false);
+                }}
+              >
+                <Text style={[styles.modalOptionText, mode === m && styles.modalOptionTextActive]}>
+                  {MODE_LABEL[m]}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        </TouchableOpacity>
+      </Modal>
+
+      <Modal
+        visible={showModelPicker}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowModelPicker(false)}
+      >
+        <TouchableOpacity style={styles.modalBackdrop} activeOpacity={1} onPress={() => setShowModelPicker(false)}>
+          <ScrollView style={styles.modalSheetScroll}>
+            {(providers?.all ?? [])
+              .filter((p) => providers?.connected.includes(p.id))
+              .map((provider) => (
+                <View key={provider.id}>
+                  <Text style={styles.modalGroupLabel}>{provider.name}</Text>
+                  {Object.values(provider.models).map((m) => {
+                    const active = model?.providerID === provider.id && model?.modelID === m.id;
+                    return (
+                      <TouchableOpacity
+                        key={m.id}
+                        style={styles.modalOption}
+                        onPress={() => {
+                          setModel({ providerID: provider.id, modelID: m.id });
+                          setShowModelPicker(false);
+                        }}
+                      >
+                        <Text style={[styles.modalOptionText, active && styles.modalOptionTextActive]}>
+                          {m.name}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              ))}
+          </ScrollView>
+        </TouchableOpacity>
+      </Modal>
     </KeyboardAvoidingView>
   );
 }
@@ -534,31 +615,72 @@ function createStyles(theme: Theme) {
       fontWeight: '600',
       color: theme.textDim,
     },
-    modeRow: {
+    dropdownRow: {
       flexDirection: 'row',
-      gap: 6,
+      gap: 8,
       paddingHorizontal: 12,
-      paddingTop: 4,
+      paddingTop: 8,
     },
-    modeChip: {
+    dropdownChip: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 4,
       paddingHorizontal: 12,
-      paddingVertical: 6,
+      paddingVertical: 7,
       borderRadius: 14,
       backgroundColor: theme.bgAlt,
       borderWidth: 1,
       borderColor: theme.border,
+      maxWidth: 200,
     },
-    modeChipActive: {
-      backgroundColor: theme.accent,
-      borderColor: theme.accent,
-    },
-    modeChipText: {
+    dropdownChipText: {
       fontSize: 12,
       fontWeight: '600',
+      color: theme.text,
+    },
+    dropdownCaret: {
+      fontSize: 10,
       color: theme.textDim,
     },
-    modeChipTextActive: {
-      color: theme.accentText,
+    modalBackdrop: {
+      flex: 1,
+      backgroundColor: 'rgba(0,0,0,0.4)',
+      justifyContent: 'flex-end',
+    },
+    modalSheet: {
+      backgroundColor: theme.surface,
+      borderTopLeftRadius: 16,
+      borderTopRightRadius: 16,
+      paddingVertical: 8,
+      paddingBottom: 24,
+    },
+    modalSheetScroll: {
+      backgroundColor: theme.surface,
+      borderTopLeftRadius: 16,
+      borderTopRightRadius: 16,
+      maxHeight: '60%',
+      paddingVertical: 8,
+    },
+    modalGroupLabel: {
+      paddingHorizontal: 16,
+      paddingTop: 12,
+      paddingBottom: 4,
+      fontSize: 12,
+      fontWeight: '700',
+      color: theme.textFaint,
+      textTransform: 'uppercase',
+    },
+    modalOption: {
+      paddingHorizontal: 16,
+      paddingVertical: 12,
+    },
+    modalOptionText: {
+      fontSize: 15,
+      color: theme.text,
+    },
+    modalOptionTextActive: {
+      color: theme.accent,
+      fontWeight: '700',
     },
     composer: {
       flexDirection: 'row',

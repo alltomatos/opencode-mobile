@@ -95,6 +95,31 @@ export type Agent = {
   native?: boolean;
 };
 
+// GET /provider — conferido contra a resposta real do SDK
+// (ProviderListResponses: {all, default, connected}).
+export type Model = {
+  id: string;
+  providerID: string;
+  name: string;
+};
+
+export type Provider = {
+  id: string;
+  name: string;
+  models: Record<string, Model>;
+};
+
+export type ProviderList = {
+  all: Provider[];
+  default: Record<string, string>;
+  connected: string[];
+};
+
+export type SelectedModel = {
+  providerID: string;
+  modelID: string;
+};
+
 export type SessionEvent =
   | { type: 'session.created'; properties: { sessionID: string; info: Session } }
   | { type: 'session.updated'; properties: { sessionID: string; info: Session } }
@@ -114,6 +139,14 @@ function authedUrl(server: ServerConnection, token: string, path: string): strin
   const url = new URL(path, server.url);
   url.searchParams.set('auth_token', token);
   return url.toString();
+}
+
+export async function listProviders(server: ServerConnection, token: string): Promise<ProviderList> {
+  const res = await fetch(authedUrl(server, token, '/provider'));
+  if (!res.ok) {
+    throw new Error(`GET /provider falhou: ${res.status}`);
+  }
+  return (await res.json()) as ProviderList;
 }
 
 export async function listAgents(server: ServerConnection, token: string): Promise<Agent[]> {
@@ -224,12 +257,17 @@ export async function sendPrompt(
   token: string,
   sessionID: string,
   text: string,
-  agent?: string
+  agent?: string,
+  model?: SelectedModel
 ): Promise<MessageWithParts> {
   const res = await fetch(authedUrl(server, token, `/session/${sessionID}/message`), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ parts: [{ type: 'text', text }], ...(agent ? { agent } : {}) }),
+    body: JSON.stringify({
+      parts: [{ type: 'text', text }],
+      ...(agent ? { agent } : {}),
+      ...(model ? { model: { id: model.modelID, providerID: model.providerID } } : {}),
+    }),
   });
   if (!res.ok) {
     throw new Error(`POST /session/${sessionID}/message falhou: ${res.status}`);
