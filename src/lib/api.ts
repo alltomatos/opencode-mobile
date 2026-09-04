@@ -67,6 +67,14 @@ export async function listSessions(server: ServerConnection, token: string): Pro
   return (await res.json()) as Session[];
 }
 
+export async function getSession(server: ServerConnection, token: string, sessionID: string): Promise<Session> {
+  const res = await fetch(authedUrl(server, token, `/session/${sessionID}`));
+  if (!res.ok) {
+    throw new Error(`GET /session/${sessionID} falhou: ${res.status}`);
+  }
+  return (await res.json()) as Session;
+}
+
 export async function listMessages(
   server: ServerConnection,
   token: string,

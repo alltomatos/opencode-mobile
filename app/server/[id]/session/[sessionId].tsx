@@ -1,4 +1,4 @@
-import { useLocalSearchParams } from 'expo-router';
+import { Stack, useLocalSearchParams } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
 import {
   FlatList,
@@ -12,7 +12,15 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { listMessages, Message, MessageWithParts, Part, sendPrompt, subscribeEvents } from '../../../../src/lib/api';
+import {
+  getSession,
+  listMessages,
+  Message,
+  MessageWithParts,
+  Part,
+  sendPrompt,
+  subscribeEvents,
+} from '../../../../src/lib/api';
 import { getServerToken, listServers, ServerConnection } from '../../../../src/lib/servers';
 
 function textOf(message: MessageWithParts): string {
@@ -30,6 +38,7 @@ export default function SessionChatScreen() {
   const [server, setServer] = useState<ServerConnection | null | undefined>(undefined);
   const [token, setToken] = useState<string | null>(null);
   const [messages, setMessages] = useState<MessageWithParts[] | null>(null);
+  const [sessionTitle, setSessionTitle] = useState<string | null>(null);
   const [draft, setDraft] = useState('');
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -49,6 +58,9 @@ export default function SessionChatScreen() {
     listMessages(server, token, sessionId)
       .then((data) => !cancelled && setMessages(data))
       .catch((e) => !cancelled && setError(e instanceof Error ? e.message : 'Falha ao carregar mensagens.'));
+    getSession(server, token, sessionId)
+      .then((data) => !cancelled && setSessionTitle(data.title))
+      .catch(() => {});
 
     // Enquanto o POST de envio está em voo (rota síncrona), o texto do
     // assistente chega incrementalmente por aqui via message.part.updated
@@ -58,7 +70,12 @@ export default function SessionChatScreen() {
       try {
         for await (const event of subscribeEvents(server, token, controller.signal)) {
           if (cancelled) return;
-          if (event.type === 'message.updated') {
+          if (event.type === 'session.updated') {
+            const { sessionID, info } = (
+              event as { properties: { sessionID: string; info: { title: string } } }
+            ).properties;
+            if (sessionID === sessionId) setSessionTitle(info.title);
+          } else if (event.type === 'message.updated') {
             const { sessionID, info } = (event as { properties: { sessionID: string; info: Message } })
               .properties;
             if (sessionID !== sessionId) continue;
@@ -105,8 +122,12 @@ export default function SessionChatScreen() {
     setError(null);
     try {
       await sendPrompt(server, token, sessionId, text);
-      const fresh = await listMessages(server, token, sessionId);
+      const [fresh, session] = await Promise.all([
+        listMessages(server, token, sessionId),
+        getSession(server, token, sessionId),
+      ]);
       setMessages(fresh);
+      setSessionTitle(session.title);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Falha ao enviar mensagem.');
     } finally {
@@ -114,15 +135,25 @@ export default function SessionChatScreen() {
     }
   }
 
+  const headerTitle = sessionTitle || 'Sessão';
+
   if (server === undefined || messages === null) {
-    return <View style={styles.container} />;
+    return (
+      <>
+        <Stack.Screen options={{ title: headerTitle }} />
+        <View style={styles.container} />
+      </>
+    );
   }
 
   if (server === null) {
     return (
-      <View style={styles.container}>
-        <Text style={styles.placeholder}>Servidor não encontrado.</Text>
-      </View>
+      <>
+        <Stack.Screen options={{ title: headerTitle }} />
+        <View style={styles.container}>
+          <Text style={styles.placeholder}>Servidor não encontrado.</Text>
+        </View>
+      </>
     );
   }
 
@@ -132,6 +163,7 @@ export default function SessionChatScreen() {
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       keyboardVerticalOffset={insets.top}
     >
+      <Stack.Screen options={{ title: headerTitle }} />
       <FlatList
         ref={listRef}
         style={styles.list}
