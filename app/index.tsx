@@ -4,10 +4,13 @@ import { FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { listServers, ServerConnection } from '../src/lib/servers';
+import { Theme, useTheme } from '../src/lib/theme';
 
 export default function ServerListScreen() {
   const [servers, setServers] = useState<ServerConnection[] | null>(null);
   const insets = useSafeAreaInsets();
+  const theme = useTheme();
+  const styles = createStyles(theme);
 
   useFocusEffect(
     useCallback(() => {
@@ -54,49 +57,55 @@ export default function ServerListScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 24,
-    gap: 12,
-  },
-  title: {
-    fontSize: 18,
-    fontWeight: '600',
-  },
-  subtitle: {
-    textAlign: 'center',
-    color: '#6b7280',
-  },
-  link: {
-    marginTop: 12,
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#2563eb',
-  },
-  list: {
-    flex: 1,
-  },
-  row: {
-    padding: 16,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: '#e5e7eb',
-  },
-  rowLabel: {
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  rowUrl: {
-    color: '#6b7280',
-    marginTop: 2,
-  },
-  addLink: {
-    textAlign: 'center',
-    padding: 16,
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#2563eb',
-  },
-});
+function createStyles(theme: Theme) {
+  return StyleSheet.create({
+    container: {
+      flex: 1,
+      alignItems: 'center',
+      justifyContent: 'center',
+      padding: 24,
+      gap: 12,
+      backgroundColor: theme.bg,
+    },
+    title: {
+      fontSize: 18,
+      fontWeight: '600',
+      color: theme.text,
+    },
+    subtitle: {
+      textAlign: 'center',
+      color: theme.textDim,
+    },
+    link: {
+      marginTop: 12,
+      fontSize: 16,
+      fontWeight: '600',
+      color: theme.accent,
+    },
+    list: {
+      flex: 1,
+      backgroundColor: theme.bg,
+    },
+    row: {
+      padding: 16,
+      borderBottomWidth: StyleSheet.hairlineWidth,
+      borderBottomColor: theme.border,
+    },
+    rowLabel: {
+      fontSize: 16,
+      fontWeight: '600',
+      color: theme.text,
+    },
+    rowUrl: {
+      color: theme.textDim,
+      marginTop: 2,
+    },
+    addLink: {
+      textAlign: 'center',
+      padding: 16,
+      fontSize: 16,
+      fontWeight: '600',
+      color: theme.accent,
+    },
+  });
+}

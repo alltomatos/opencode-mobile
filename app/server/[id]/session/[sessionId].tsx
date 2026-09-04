@@ -28,6 +28,7 @@ import {
   subscribeEvents,
 } from '../../../../src/lib/api';
 import { getServerToken, listServers, ServerConnection } from '../../../../src/lib/servers';
+import { Theme, useTheme } from '../../../../src/lib/theme';
 
 function textOf(message: MessageWithParts): string {
   return message.parts
@@ -40,6 +41,8 @@ export default function SessionChatScreen() {
   const { id, sessionId } = useLocalSearchParams<{ id: string; sessionId: string }>();
   const insets = useSafeAreaInsets();
   const listRef = useRef<FlatList>(null);
+  const theme = useTheme();
+  const styles = createStyles(theme);
 
   const [server, setServer] = useState<ServerConnection | null | undefined>(undefined);
   const [token, setToken] = useState<string | null>(null);
@@ -304,7 +307,7 @@ export default function SessionChatScreen() {
         <TextInput
           style={styles.input}
           placeholder="Mensagem…"
-          placeholderTextColor="#9ca3af"
+          placeholderTextColor={theme.placeholder}
           value={draft}
           onChangeText={setDraft}
           multiline
@@ -321,149 +324,153 @@ export default function SessionChatScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#fff',
-  },
-  list: {
-    flex: 1,
-  },
-  listContent: {
-    padding: 16,
-    gap: 8,
-  },
-  placeholder: {
-    textAlign: 'center',
-    color: '#9ca3af',
-    marginTop: 24,
-  },
-  error: {
-    color: '#dc2626',
-    textAlign: 'center',
-    paddingVertical: 8,
-  },
-  bubbleRow: {
-    flexDirection: 'row',
-  },
-  bubbleRowUser: {
-    justifyContent: 'flex-end',
-  },
-  bubble: {
-    maxWidth: '85%',
-    borderRadius: 14,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-  },
-  bubbleUser: {
-    backgroundColor: '#2563eb',
-  },
-  bubbleAssistant: {
-    backgroundColor: '#f3f4f6',
-  },
-  bubbleTextUser: {
-    color: '#fff',
-    fontSize: 15,
-  },
-  bubbleTextAssistant: {
-    color: '#111827',
-    fontSize: 15,
-  },
-  askCard: {
-    marginHorizontal: 12,
-    marginBottom: 8,
-    padding: 14,
-    borderRadius: 12,
-    backgroundColor: '#fffbeb',
-    borderWidth: 1,
-    borderColor: '#fde68a',
-    gap: 8,
-  },
-  askTitle: {
-    fontSize: 15,
-    fontWeight: '600',
-    color: '#92400e',
-  },
-  askSubtitle: {
-    fontSize: 13,
-    color: '#78716c',
-  },
-  askActions: {
-    flexDirection: 'row',
-    gap: 8,
-    marginTop: 4,
-  },
-  askButton: {
-    flex: 1,
-    backgroundColor: '#2563eb',
-    borderRadius: 10,
-    paddingVertical: 10,
-    alignItems: 'center',
-  },
-  askButtonReject: {
-    backgroundColor: '#fee2e2',
-  },
-  askButtonText: {
-    color: '#fff',
-    fontWeight: '600',
-    fontSize: 13,
-  },
-  askButtonTextReject: {
-    color: '#b91c1c',
-    fontWeight: '600',
-    fontSize: 13,
-  },
-  askOptions: {
-    gap: 8,
-    marginTop: 4,
-  },
-  askOption: {
-    borderWidth: 1,
-    borderColor: '#fde68a',
-    borderRadius: 10,
-    padding: 10,
-    backgroundColor: '#fff',
-  },
-  askOptionLabel: {
-    fontWeight: '600',
-    fontSize: 14,
-    color: '#111827',
-  },
-  askOptionDescription: {
-    fontSize: 12,
-    color: '#6b7280',
-    marginTop: 2,
-  },
-  composer: {
-    flexDirection: 'row',
-    alignItems: 'flex-end',
-    gap: 8,
-    paddingHorizontal: 12,
-    paddingTop: 8,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: '#e5e7eb',
-  },
-  input: {
-    flex: 1,
-    maxHeight: 120,
-    borderWidth: 1,
-    borderColor: '#d1d5db',
-    borderRadius: 20,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    fontSize: 15,
-  },
-  sendButton: {
-    backgroundColor: '#2563eb',
-    borderRadius: 20,
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-  },
-  sendButtonDisabled: {
-    backgroundColor: '#93c5fd',
-  },
-  sendButtonText: {
-    color: '#fff',
-    fontWeight: '600',
-  },
-});
+function createStyles(theme: Theme) {
+  return StyleSheet.create({
+    container: {
+      flex: 1,
+      backgroundColor: theme.bg,
+    },
+    list: {
+      flex: 1,
+      backgroundColor: theme.bg,
+    },
+    listContent: {
+      padding: 16,
+      gap: 8,
+    },
+    placeholder: {
+      textAlign: 'center',
+      color: theme.textFaint,
+      marginTop: 24,
+    },
+    error: {
+      color: theme.danger,
+      textAlign: 'center',
+      paddingVertical: 8,
+    },
+    bubbleRow: {
+      flexDirection: 'row',
+    },
+    bubbleRowUser: {
+      justifyContent: 'flex-end',
+    },
+    bubble: {
+      maxWidth: '85%',
+      borderRadius: 14,
+      paddingHorizontal: 14,
+      paddingVertical: 10,
+    },
+    bubbleUser: {
+      backgroundColor: theme.accent,
+    },
+    bubbleAssistant: {
+      backgroundColor: theme.bubbleAssistant,
+    },
+    bubbleTextUser: {
+      color: theme.accentText,
+      fontSize: 15,
+    },
+    bubbleTextAssistant: {
+      color: theme.text,
+      fontSize: 15,
+    },
+    askCard: {
+      marginHorizontal: 12,
+      marginBottom: 8,
+      padding: 14,
+      borderRadius: 12,
+      backgroundColor: theme.warnBg,
+      borderWidth: 1,
+      borderColor: theme.warnBorder,
+      gap: 8,
+    },
+    askTitle: {
+      fontSize: 15,
+      fontWeight: '600',
+      color: theme.warnText,
+    },
+    askSubtitle: {
+      fontSize: 13,
+      color: theme.textDim,
+    },
+    askActions: {
+      flexDirection: 'row',
+      gap: 8,
+      marginTop: 4,
+    },
+    askButton: {
+      flex: 1,
+      backgroundColor: theme.accent,
+      borderRadius: 10,
+      paddingVertical: 10,
+      alignItems: 'center',
+    },
+    askButtonReject: {
+      backgroundColor: theme.dangerBg,
+    },
+    askButtonText: {
+      color: theme.accentText,
+      fontWeight: '600',
+      fontSize: 13,
+    },
+    askButtonTextReject: {
+      color: theme.danger,
+      fontWeight: '600',
+      fontSize: 13,
+    },
+    askOptions: {
+      gap: 8,
+      marginTop: 4,
+    },
+    askOption: {
+      borderWidth: 1,
+      borderColor: theme.warnBorder,
+      borderRadius: 10,
+      padding: 10,
+      backgroundColor: theme.surface,
+    },
+    askOptionLabel: {
+      fontWeight: '600',
+      fontSize: 14,
+      color: theme.text,
+    },
+    askOptionDescription: {
+      fontSize: 12,
+      color: theme.textDim,
+      marginTop: 2,
+    },
+    composer: {
+      flexDirection: 'row',
+      alignItems: 'flex-end',
+      gap: 8,
+      paddingHorizontal: 12,
+      paddingTop: 8,
+      borderTopWidth: StyleSheet.hairlineWidth,
+      borderTopColor: theme.border,
+    },
+    input: {
+      flex: 1,
+      maxHeight: 120,
+      borderWidth: 1,
+      borderColor: theme.border,
+      borderRadius: 20,
+      paddingHorizontal: 14,
+      paddingVertical: 10,
+      fontSize: 15,
+      color: theme.text,
+    },
+    sendButton: {
+      backgroundColor: theme.accent,
+      borderRadius: 20,
+      paddingHorizontal: 16,
+      paddingVertical: 10,
+    },
+    sendButtonDisabled: {
+      backgroundColor: theme.accentDim,
+    },
+    sendButtonText: {
+      color: theme.accentText,
+      fontWeight: '600',
+    },
+  });
+}

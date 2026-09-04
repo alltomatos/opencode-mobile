@@ -5,10 +5,13 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { listSessions, Session, subscribeEvents } from '../../../src/lib/api';
 import { getServerToken, listServers, removeServer, ServerConnection } from '../../../src/lib/servers';
+import { Theme, useTheme } from '../../../src/lib/theme';
 
 export default function ServerSessionsScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const insets = useSafeAreaInsets();
+  const theme = useTheme();
+  const styles = createStyles(theme);
   const [server, setServer] = useState<ServerConnection | null | undefined>(undefined);
   const [token, setToken] = useState<string | null>(null);
   const [sessions, setSessions] = useState<Session[] | null>(null);
@@ -101,7 +104,7 @@ export default function ServerSessionsScreen() {
 
       <Button
         title="Remover servidor"
-        color="#dc2626"
+        color={theme.danger}
         onPress={async () => {
           await removeServer(server.id);
           router.replace('/');
@@ -111,48 +114,54 @@ export default function ServerSessionsScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 24,
-    gap: 12,
-  },
-  list: {
-    flex: 1,
-    padding: 16,
-    gap: 12,
-  },
-  header: {
-    gap: 4,
-  },
-  title: {
-    fontSize: 18,
-    fontWeight: '600',
-  },
-  subtitle: {
-    color: '#6b7280',
-  },
-  error: {
-    color: '#dc2626',
-  },
-  placeholder: {
-    textAlign: 'center',
-    color: '#9ca3af',
-    marginVertical: 24,
-  },
-  row: {
-    paddingVertical: 12,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: '#e5e7eb',
-  },
-  rowTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  rowMeta: {
-    color: '#6b7280',
-    marginTop: 2,
-  },
-});
+function createStyles(theme: Theme) {
+  return StyleSheet.create({
+    container: {
+      flex: 1,
+      alignItems: 'center',
+      justifyContent: 'center',
+      padding: 24,
+      gap: 12,
+      backgroundColor: theme.bg,
+    },
+    list: {
+      flex: 1,
+      padding: 16,
+      gap: 12,
+      backgroundColor: theme.bg,
+    },
+    header: {
+      gap: 4,
+    },
+    title: {
+      fontSize: 18,
+      fontWeight: '600',
+      color: theme.text,
+    },
+    subtitle: {
+      color: theme.textDim,
+    },
+    error: {
+      color: theme.danger,
+    },
+    placeholder: {
+      textAlign: 'center',
+      color: theme.textFaint,
+      marginVertical: 24,
+    },
+    row: {
+      paddingVertical: 12,
+      borderBottomWidth: StyleSheet.hairlineWidth,
+      borderBottomColor: theme.border,
+    },
+    rowTitle: {
+      fontSize: 16,
+      fontWeight: '600',
+      color: theme.text,
+    },
+    rowMeta: {
+      color: theme.textDim,
+      marginTop: 2,
+    },
+  });
+}
