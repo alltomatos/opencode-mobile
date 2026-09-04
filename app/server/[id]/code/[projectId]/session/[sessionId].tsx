@@ -331,8 +331,8 @@ export default function SessionChatScreen() {
   return (
     <KeyboardAvoidingView
       style={styles.container}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-      keyboardVerticalOffset={insets.top}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      keyboardVerticalOffset={Platform.OS === 'ios' ? insets.top : 0}
     >
       <Stack.Screen options={{ title: headerTitle }} />
 
@@ -427,8 +427,8 @@ export default function SessionChatScreen() {
       )}
 
       {commandSuggestions.length > 0 && (
-        <View style={styles.suggestions}>
-          {commandSuggestions.slice(0, 6).map((c) => (
+        <ScrollView style={styles.suggestions} keyboardShouldPersistTaps="handled">
+          {commandSuggestions.map((c) => (
             <TouchableOpacity
               key={c.name}
               style={styles.suggestionRow}
@@ -445,7 +445,7 @@ export default function SessionChatScreen() {
               )}
             </TouchableOpacity>
           ))}
-        </View>
+        </ScrollView>
       )}
 
       <View style={[styles.composer, { paddingBottom: insets.bottom + 12 }]}>
@@ -746,6 +746,7 @@ function createStyles(theme: Theme) {
     suggestions: {
       marginHorizontal: 12,
       marginBottom: 4,
+      maxHeight: 260,
       borderRadius: 10,
       backgroundColor: theme.surface,
       borderWidth: 1,
