@@ -27,6 +27,15 @@ import {
   sendPrompt,
   subscribeEvents,
 } from '../../../../src/lib/api';
+
+// Ver docs/prd/mobile-app.md §6.1, item 3 — "modo" no app de referência
+// é dois mecanismos combinados: agente (build/plan) + nível de
+// auto-aceite de permissão (client-only, o servidor não tem esse
+// conceito). "Aceitar edições" fica pra depois — exige diferenciar
+// permissão de edição das outras só pelo campo `permission`/`patterns`.
+type Mode = 'manual' | 'plan' | 'auto';
+const MODE_AGENT: Record<Mode, string> = { manual: 'build', plan: 'plan', auto: 'build' };
+const MODE_LABEL: Record<Mode, string> = { manual: 'Manual', plan: 'Planejar', auto: 'Automático' };
 import { getServerToken, listServers, ServerConnection } from '../../../../src/lib/servers';
 import { Theme, useTheme } from '../../../../src/lib/theme';
 
@@ -54,6 +63,9 @@ export default function SessionChatScreen() {
   const [permissionQueue, setPermissionQueue] = useState<PermissionRequest[]>([]);
   const [questionQueue, setQuestionQueue] = useState<QuestionRequest[]>([]);
   const [respondingID, setRespondingID] = useState<string | null>(null);
+  const [mode, setMode] = useState<Mode>('manual');
+  const modeRef = useRef<Mode>('manual');
+  modeRef.current = mode;
 
   useEffect(() => {
     listServers().then(async (servers) => {
@@ -108,6 +120,10 @@ export default function SessionChatScreen() {
           } else if (event.type === 'permission.asked') {
             const req = (event as { properties: PermissionRequest }).properties;
             if (req.sessionID !== sessionId) continue;
+            if (modeRef.current === 'auto') {
+              replyPermission(server, token, req.id, 'always').catch(() => {});
+              continue;
+            }
             setPermissionQueue((prev) => (prev.some((p) => p.id === req.id) ? prev : [...prev, req]));
           } else if (event.type === 'permission.replied') {
             const { requestID } = (event as { properties: { requestID: string } }).properties;
@@ -145,6 +161,17 @@ export default function SessionChatScreen() {
     };
   }, [server, token, sessionId]);
 
+  // Flush de pedidos que já estavam na fila antes de trocar pra
+  // "Automático" (ex.: carregados no GET /permission inicial).
+  useEffect(() => {
+    if (mode !== 'auto' || !server || !token || permissionQueue.length === 0) return;
+    const toFlush = permissionQueue;
+    setPermissionQueue([]);
+    for (const req of toFlush) {
+      replyPermission(server, token, req.id, 'always').catch(() => {});
+    }
+  }, [mode, server, token, permissionQueue]);
+
   async function handleSend() {
     const text = draft.trim();
     if (!text || !server || !token || sending) return;
@@ -153,7 +180,7 @@ export default function SessionChatScreen() {
     setDraft('');
     setError(null);
     try {
-      await sendPrompt(server, token, sessionId, text);
+      await sendPrompt(server, token, sessionId, text, MODE_AGENT[mode]);
       const [fresh, session] = await Promise.all([
         listMessages(server, token, sessionId),
         getSession(server, token, sessionId),
@@ -303,6 +330,18 @@ export default function SessionChatScreen() {
         </View>
       )}
 
+      <View style={styles.modeRow}>
+        {(['manual', 'plan', 'auto'] as Mode[]).map((m) => (
+          <TouchableOpacity
+            key={m}
+            style={[styles.modeChip, mode === m && styles.modeChipActive]}
+            onPress={() => setMode(m)}
+          >
+            <Text style={[styles.modeChipText, mode === m && styles.modeChipTextActive]}>{MODE_LABEL[m]}</Text>
+          </TouchableOpacity>
+        ))}
+      </View>
+
       <View style={[styles.composer, { paddingBottom: insets.bottom + 12 }]}>
         <TextInput
           style={styles.input}
@@ -438,6 +477,32 @@ function createStyles(theme: Theme) {
       fontSize: 12,
       color: theme.textDim,
       marginTop: 2,
+    },
+    modeRow: {
+      flexDirection: 'row',
+      gap: 6,
+      paddingHorizontal: 12,
+      paddingTop: 4,
+    },
+    modeChip: {
+      paddingHorizontal: 12,
+      paddingVertical: 6,
+      borderRadius: 14,
+      backgroundColor: theme.bgAlt,
+      borderWidth: 1,
+      borderColor: theme.border,
+    },
+    modeChipActive: {
+      backgroundColor: theme.accent,
+      borderColor: theme.accent,
+    },
+    modeChipText: {
+      fontSize: 12,
+      fontWeight: '600',
+      color: theme.textDim,
+    },
+    modeChipTextActive: {
+      color: theme.accentText,
     },
     composer: {
       flexDirection: 'row',

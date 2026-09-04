@@ -75,6 +75,17 @@ export type QuestionRequest = {
   questions: QuestionInfo[];
 };
 
+// GET /agent — conferido contra packages/opencode/src/agent/agent.ts.
+// "build" e "plan" são os agentes nativos; "plan" nega ferramentas de
+// edição (é o que dá o modo "Planejar" de verdade — ver
+// docs/prd/mobile-app.md §6.1, item 3).
+export type Agent = {
+  name: string;
+  description?: string;
+  mode: 'subagent' | 'primary' | 'all';
+  native?: boolean;
+};
+
 export type SessionEvent =
   | { type: 'session.created'; properties: { sessionID: string; info: Session } }
   | { type: 'session.updated'; properties: { sessionID: string; info: Session } }
@@ -94,6 +105,14 @@ function authedUrl(server: ServerConnection, token: string, path: string): strin
   const url = new URL(path, server.url);
   url.searchParams.set('auth_token', token);
   return url.toString();
+}
+
+export async function listAgents(server: ServerConnection, token: string): Promise<Agent[]> {
+  const res = await fetch(authedUrl(server, token, '/agent'));
+  if (!res.ok) {
+    throw new Error(`GET /agent falhou: ${res.status}`);
+  }
+  return (await res.json()) as Agent[];
 }
 
 export async function listSessions(server: ServerConnection, token: string): Promise<Session[]> {
@@ -132,12 +151,13 @@ export async function sendPrompt(
   server: ServerConnection,
   token: string,
   sessionID: string,
-  text: string
+  text: string,
+  agent?: string
 ): Promise<MessageWithParts> {
   const res = await fetch(authedUrl(server, token, `/session/${sessionID}/message`), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ parts: [{ type: 'text', text }] }),
+    body: JSON.stringify({ parts: [{ type: 'text', text }], ...(agent ? { agent } : {}) }),
   });
   if (!res.ok) {
     throw new Error(`POST /session/${sessionID}/message falhou: ${res.status}`);
