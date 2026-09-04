@@ -2,6 +2,7 @@ import { Link, Stack, useLocalSearchParams } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
 import {
   FlatList,
+  Keyboard,
   KeyboardAvoidingView,
   Modal,
   Platform,
@@ -81,6 +82,21 @@ export default function SessionChatScreen() {
   const modeRef = useRef<Mode>('manual');
   modeRef.current = mode;
   const [children, setChildren] = useState<Session[]>([]);
+  const [keyboardVisible, setKeyboardVisible] = useState(false);
+
+  useEffect(() => {
+    // O padding de safe-area do fundo (barra de navegação) não deve
+    // somar em cima do próprio teclado — ele já ocupa esse espaço,
+    // e a soma dos dois deixava um vão morto abaixo do composer.
+    const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
+    const hideEvent = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
+    const showSub = Keyboard.addListener(showEvent, () => setKeyboardVisible(true));
+    const hideSub = Keyboard.addListener(hideEvent, () => setKeyboardVisible(false));
+    return () => {
+      showSub.remove();
+      hideSub.remove();
+    };
+  }, []);
   const [providers, setProviders] = useState<ProviderList | null>(null);
   const [model, setModel] = useState<SelectedModel | null>(null);
   const [showModePicker, setShowModePicker] = useState(false);
@@ -448,7 +464,7 @@ export default function SessionChatScreen() {
         </ScrollView>
       )}
 
-      <View style={[styles.composer, { paddingBottom: insets.bottom + 12 }]}>
+      <View style={styles.composer}>
         <TextInput
           style={styles.input}
           placeholder="Mensagem…"
@@ -466,7 +482,7 @@ export default function SessionChatScreen() {
         </TouchableOpacity>
       </View>
 
-      <View style={[styles.dropdownRow, { paddingBottom: insets.bottom + 8 }]}>
+      <View style={[styles.dropdownRow, { paddingBottom: keyboardVisible ? 8 : insets.bottom + 8 }]}>
         <TouchableOpacity style={styles.dropdownChip} onPress={() => setShowModelPicker(true)}>
           <Text style={styles.dropdownChipText} numberOfLines={1}>
             {modelLabel}
