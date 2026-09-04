@@ -59,8 +59,15 @@ export default function AddProjectScreen() {
       setStatus('Preparando…');
       const bootstrap = await createSession(server, token, BOOTSTRAP_DIRECTORY);
 
+      // Uma pasta sem git vira "global" no servidor — todo diretório
+      // sem VCS detectado compartilha um único worktree "/" (ver
+      // packages/opencode/src/project/project.ts) e some no meio de
+      // outros projetos. `git init` garante que a pasta nova vire seu
+      // próprio projeto, com worktree = o caminho real.
       const command =
-        mode === 'github' ? `git clone "${githubUrl.trim()}" "${fullPath}"` : `mkdir -p "${fullPath}"`;
+        mode === 'github'
+          ? `git clone "${githubUrl.trim()}" "${fullPath}"`
+          : `mkdir -p "${fullPath}" && git -C "${fullPath}" init`;
       setStatus(mode === 'github' ? 'Clonando repositório…' : 'Criando pasta…');
       await runShell(server, token, bootstrap.id, command);
 

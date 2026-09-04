@@ -41,7 +41,11 @@ export default function ProjectListScreen() {
     <View style={[styles.list, { paddingBottom: insets.bottom + 16 }]}>
       {error && <Text style={styles.error}>{error}</Text>}
       <FlatList
-        data={projects}
+        // worktree "/" é o projeto "global" que o servidor usa como
+        // catch-all pra diretórios sem git detectado — não é um
+        // projeto de verdade, não faz sentido listar (ver
+        // packages/opencode/src/project/project.ts).
+        data={projects.filter((p) => p.worktree !== '/')}
         keyExtractor={(item) => item.id}
         ListEmptyComponent={
           <Text style={styles.placeholder}>Nenhum projeto ainda — adicione um pra começar.</Text>
