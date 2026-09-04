@@ -82,6 +82,15 @@ Isso abre um caminho direto e de baixo esforço relativo: o app não precisa emb
 - Reaproveita a mesma infraestrutura de servir arquivos estáticos que o app já precisa ter pra outras coisas.
 - Generaliza pra qualquer projeto Web (não só jogos) — o mesmo mecanismo serve pra "peça pro agente construir um site e veja rodando no celular".
 
+## 5.1 Navegação e criação de projeto
+
+A hierarquia do app é `Servidores > [Code | Batuta] > Projetos > Sessões`. Um projeto é sempre uma pasta — não existe sessão sem diretório. Dois jeitos de criar um projeto, ambos padronizados em `/home/opencode/projects/<nome>`:
+
+1. **Pasta nova**: usuário dá um nome, o app roda `mkdir -p /home/opencode/projects/<nome>`.
+2. **Clonar do GitHub**: usuário cola a URL do repositório, o app roda `git clone <url> /home/opencode/projects/<nome>` (nome extraído da URL).
+
+Não existe endpoint de "criar projeto"/"mkdir"/"clone" dedicado no backend — o mecanismo real (ver seção 6.1 acima, "Modo de execução", e `src/lib/api.ts` do app mobile) é: cria uma sessão de bootstrap ancorada em `/home/opencode` (o home do usuário do servidor, que sempre existe — evita o problema de galinha-e-ovo de `/home/opencode/projects` ainda não existir na primeira vez), roda o comando via `POST /session/:id/shell`, e então registra o caminho resultante como projeto conhecido via `GET /project/current?directory=<path>` (mesmo mecanismo de "abrir projeto" documentado no `mobile-api-reference.md`). `/home/opencode/projects` como raiz padrão é uma convenção deste app mobile, não uma configuração do servidor — outros clientes (desktop, TUI) não a seguem.
+
 ## 6.1 Composer completo — paridade com os clientes de referência (Claude Code app, etc.)
 
 O chat da Fase 1 (texto puro, enviar/receber) já funciona (ver `mobile-api-reference.md` §5.1), mas um cliente de coding agent de verdade — a régua aqui é o próprio app mobile do Claude Code — não para nisso. Antes de avançar pra Batuta (seção 3, item 2), o composer da sessão precisa fechar estas lacunas:

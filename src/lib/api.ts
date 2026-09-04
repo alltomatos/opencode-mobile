@@ -237,6 +237,29 @@ export async function sendPrompt(
   return (await res.json()) as MessageWithParts;
 }
 
+// POST /session/:id/shell — conferido contra
+// packages/opencode/src/session/prompt.ts (ShellInput): `agent` é
+// obrigatório (não opcional como no /message), `command` é a linha de
+// shell crua. Usado só pra bootstrap de projeto (mkdir/git clone) —
+// não é uma feature de terminal geral no app ainda.
+export async function runShell(
+  server: ServerConnection,
+  token: string,
+  sessionID: string,
+  command: string,
+  agent: string = 'build'
+): Promise<MessageWithParts> {
+  const res = await fetch(authedUrl(server, token, `/session/${sessionID}/shell`), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ agent, command }),
+  });
+  if (!res.ok) {
+    throw new Error(`POST /session/${sessionID}/shell falhou: ${res.status}`);
+  }
+  return (await res.json()) as MessageWithParts;
+}
+
 export async function listPermissions(server: ServerConnection, token: string): Promise<PermissionRequest[]> {
   const res = await fetch(authedUrl(server, token, '/permission'));
   if (!res.ok) {
