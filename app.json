@@ -4,6 +4,7 @@
     "slug": "opencode-mobile",
     "version": "1.0.0",
     "orientation": "portrait",
+    "scheme": "opencode-mobile",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
     "ios": {
@@ -20,6 +21,10 @@
     },
     "web": {
       "favicon": "./assets/favicon.png"
-    }
+    },
+    "plugins": [
+      "expo-router",
+      "expo-status-bar"
+    ]
   }
 }
