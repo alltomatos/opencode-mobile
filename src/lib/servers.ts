@@ -1,3 +1,4 @@
+import * as Crypto from 'expo-crypto';
 import * as SecureStore from 'expo-secure-store';
 
 // Um servidor pareado (docs/prd/mobile-api-reference.md §3-4). Fase 1 só
@@ -66,7 +67,7 @@ export async function verifyServer(url: string, token: string): Promise<boolean>
 
 export async function addServer(payload: PairingPayload): Promise<ServerConnection> {
   const server: ServerConnection = {
-    id: crypto.randomUUID(),
+    id: Crypto.randomUUID(),
     url: payload.url,
     label: payload.label ?? new URL(payload.url).host,
   };
