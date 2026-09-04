@@ -3,7 +3,6 @@ import { useEffect, useRef, useState } from 'react';
 import {
   FlatList,
   Keyboard,
-  KeyboardAvoidingView,
   Modal,
   Platform,
   ScrollView,
@@ -82,16 +81,22 @@ export default function SessionChatScreen() {
   const modeRef = useRef<Mode>('manual');
   modeRef.current = mode;
   const [children, setChildren] = useState<Session[]>([]);
-  const [keyboardVisible, setKeyboardVisible] = useState(false);
+  const [keyboardHeight, setKeyboardHeight] = useState(0);
+  const keyboardVisible = keyboardHeight > 0;
 
   useEffect(() => {
-    // O padding de safe-area do fundo (barra de navegação) não deve
-    // somar em cima do próprio teclado — ele já ocupa esse espaço,
-    // e a soma dos dois deixava um vão morto abaixo do composer.
+    // No Android, o Expo Router usa react-native-screens (native
+    // stack) — cada tela vive num Fragment nativo que não participa
+    // do resize de janela do Android (windowSoftInputMode=resize) do
+    // jeito que um app "puro" faria. KeyboardAvoidingView e
+    // `behavior` não bastam aqui (testado — o composer sumia por
+    // completo, não só um espaço sobrando). Solução que não depende
+    // de resize nenhum: medir a altura real do teclado pelo evento e
+    // empurrar o conteúdo manualmente com esse valor exato.
     const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
     const hideEvent = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
-    const showSub = Keyboard.addListener(showEvent, () => setKeyboardVisible(true));
-    const hideSub = Keyboard.addListener(hideEvent, () => setKeyboardVisible(false));
+    const showSub = Keyboard.addListener(showEvent, (e) => setKeyboardHeight(e.endCoordinates.height));
+    const hideSub = Keyboard.addListener(hideEvent, () => setKeyboardHeight(0));
     return () => {
       showSub.remove();
       hideSub.remove();
@@ -345,17 +350,7 @@ export default function SessionChatScreen() {
   }
 
   return (
-    <KeyboardAvoidingView
-      style={styles.container}
-      // Android já redimensiona a janela sozinho quando o teclado abre
-      // (app.json não define android.softwareKeyboardLayoutMode, então
-      // o default do Expo — "resize" — vale). Dar um `behavior` aqui
-      // também fazia o RN encolher a área de novo em cima do
-      // encolhimento do próprio SO, subtraindo a altura do teclado
-      // duas vezes e sumindo com o composer.
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-      keyboardVerticalOffset={Platform.OS === 'ios' ? insets.top : 0}
-    >
+    <View style={[styles.container, { paddingBottom: keyboardHeight }]}>
       <Stack.Screen options={{ title: headerTitle }} />
 
       {children.length > 0 && (
@@ -557,7 +552,7 @@ export default function SessionChatScreen() {
           </ScrollView>
         </TouchableOpacity>
       </Modal>
-    </KeyboardAvoidingView>
+    </View>
   );
 }
 
