@@ -1,17 +1,15 @@
-import { router, useLocalSearchParams } from 'expo-router';
+import { Link, useLocalSearchParams } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { createSession, listProjects, Project } from '../../../src/lib/api';
-import { getServerToken, listServers, ServerConnection } from '../../../src/lib/servers';
-import { Theme, useTheme } from '../../../src/lib/theme';
+import { listProjects, Project } from '../../../../src/lib/api';
+import { getServerToken, listServers, ServerConnection } from '../../../../src/lib/servers';
+import { Theme, useTheme } from '../../../../src/lib/theme';
 
-// Uma "sessão" sempre vive dentro de um projeto (pasta) — não existe
-// sessão solta. Esta tela lista os projetos já conhecidos pelo
-// servidor (docs/prd/mobile-api-reference.md §5.4) e cria a sessão no
-// projeto escolhido.
-export default function NewSessionScreen() {
+export default function ProjectListScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
+  const insets = useSafeAreaInsets();
   const theme = useTheme();
   const styles = createStyles(theme);
 
@@ -19,7 +17,6 @@ export default function NewSessionScreen() {
   const [token, setToken] = useState<string | null>(null);
   const [projects, setProjects] = useState<Project[] | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [creatingFor, setCreatingFor] = useState<string | null>(null);
 
   useEffect(() => {
     listServers().then(async (servers) => {
@@ -36,41 +33,31 @@ export default function NewSessionScreen() {
       .catch((e) => setError(e instanceof Error ? e.message : 'Falha ao listar projetos.'));
   }, [server, token]);
 
-  async function handlePick(project: Project) {
-    if (!server || !token || creatingFor) return;
-    setCreatingFor(project.id);
-    setError(null);
-    try {
-      const session = await createSession(server, token, project.worktree);
-      router.replace(`/server/${id}/session/${session.id}`);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Falha ao criar sessão.');
-    } finally {
-      setCreatingFor(null);
-    }
-  }
-
-  if (!server || !projects) {
+  if (!server || projects === null) {
     return <View style={styles.container} />;
   }
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.list, { paddingBottom: insets.bottom + 16 }]}>
       {error && <Text style={styles.error}>{error}</Text>}
       <FlatList
         data={projects}
         keyExtractor={(item) => item.id}
         ListEmptyComponent={
-          <Text style={styles.placeholder}>Nenhum projeto conhecido por este servidor ainda.</Text>
+          <Text style={styles.placeholder}>Nenhum projeto ainda — adicione um pra começar.</Text>
         }
         renderItem={({ item }) => (
-          <Pressable style={styles.row} disabled={!!creatingFor} onPress={() => handlePick(item)}>
-            <Text style={styles.rowLabel}>{item.name || item.worktree.split('/').pop()}</Text>
-            <Text style={styles.rowPath}>{item.worktree}</Text>
-            {creatingFor === item.id && <Text style={styles.rowStatus}>Criando sessão…</Text>}
-          </Pressable>
+          <Link href={`/server/${id}/code/${item.id}`} asChild>
+            <Pressable style={styles.row}>
+              <Text style={styles.rowLabel}>{item.name || item.worktree.split('/').pop()}</Text>
+              <Text style={styles.rowPath}>{item.worktree}</Text>
+            </Pressable>
+          </Link>
         )}
       />
+      <Link href={`/server/${id}/code/add`} style={styles.addLink}>
+        + Adicionar projeto
+      </Link>
     </View>
   );
 }
@@ -78,6 +65,10 @@ export default function NewSessionScreen() {
 function createStyles(theme: Theme) {
   return StyleSheet.create({
     container: {
+      flex: 1,
+      backgroundColor: theme.bg,
+    },
+    list: {
       flex: 1,
       backgroundColor: theme.bg,
     },
@@ -107,10 +98,12 @@ function createStyles(theme: Theme) {
       marginTop: 2,
       fontSize: 13,
     },
-    rowStatus: {
+    addLink: {
+      textAlign: 'center',
+      padding: 16,
+      fontSize: 15,
+      fontWeight: '600',
       color: theme.accent,
-      marginTop: 4,
-      fontSize: 13,
     },
   });
 }

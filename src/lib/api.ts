@@ -132,6 +132,23 @@ export async function listProjects(server: ServerConnection, token: string): Pro
   return (await res.json()) as Project[];
 }
 
+// "Adicionar projeto" não é um endpoint dedicado — GET /project (a
+// doc chama de "list of projects that have been opened") mostra que
+// um projeto vira conhecido do servidor simplesmente por alguém
+// apontar `directory` numa chamada roteada por workspace (mesmo
+// WorkspaceRoutingMiddleware de toda a API). GET /project/current com
+// o novo `directory` é a chamada mínima que "abre" um projeto novo.
+export async function openProject(server: ServerConnection, token: string, directory: string): Promise<Project> {
+  const url = new URL('/project/current', server.url);
+  url.searchParams.set('auth_token', token);
+  url.searchParams.set('directory', directory);
+  const res = await fetch(url.toString());
+  if (!res.ok) {
+    throw new Error(`GET /project/current falhou: ${res.status}`);
+  }
+  return (await res.json()) as Project;
+}
+
 export async function listSessions(server: ServerConnection, token: string): Promise<Session[]> {
   const res = await fetch(authedUrl(server, token, '/session'));
   if (!res.ok) {

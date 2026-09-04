@@ -29,7 +29,7 @@ import {
   sendPrompt,
   Session,
   subscribeEvents,
-} from '../../../../src/lib/api';
+} from '../../../../../../src/lib/api';
 
 // Ver docs/prd/mobile-app.md §6.1, item 3 — "modo" no app de referência
 // é dois mecanismos combinados: agente (build/plan) + nível de
@@ -39,8 +39,8 @@ import {
 type Mode = 'manual' | 'plan' | 'auto';
 const MODE_AGENT: Record<Mode, string> = { manual: 'build', plan: 'plan', auto: 'build' };
 const MODE_LABEL: Record<Mode, string> = { manual: 'Manual', plan: 'Planejar', auto: 'Automático' };
-import { getServerToken, listServers, ServerConnection } from '../../../../src/lib/servers';
-import { Theme, useTheme } from '../../../../src/lib/theme';
+import { getServerToken, listServers, ServerConnection } from '../../../../../../src/lib/servers';
+import { Theme, useTheme } from '../../../../../../src/lib/theme';
 
 function textOf(message: MessageWithParts): string {
   return message.parts
@@ -50,7 +50,11 @@ function textOf(message: MessageWithParts): string {
 }
 
 export default function SessionChatScreen() {
-  const { id, sessionId } = useLocalSearchParams<{ id: string; sessionId: string }>();
+  const { id, projectId, sessionId } = useLocalSearchParams<{
+    id: string;
+    projectId: string;
+    sessionId: string;
+  }>();
   const insets = useSafeAreaInsets();
   const listRef = useRef<FlatList>(null);
   const theme = useTheme();
@@ -273,7 +277,7 @@ export default function SessionChatScreen() {
       {children.length > 0 && (
         <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.childrenRow}>
           {children.map((child) => (
-            <Link key={child.id} href={`/server/${id}/session/${child.id}`} asChild>
+            <Link key={child.id} href={`/server/${id}/code/${projectId}/session/${child.id}`} asChild>
               <TouchableOpacity style={styles.childChip}>
                 <Text style={styles.childChipLabel} numberOfLines={1}>
                   {child.title || child.id}
