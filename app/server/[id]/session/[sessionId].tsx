@@ -15,9 +15,15 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   getSession,
   listMessages,
+  listPermissions,
+  listQuestions,
   Message,
   MessageWithParts,
   Part,
+  PermissionRequest,
+  QuestionRequest,
+  replyPermission,
+  replyQuestion,
   sendPrompt,
   subscribeEvents,
 } from '../../../../src/lib/api';
@@ -42,6 +48,9 @@ export default function SessionChatScreen() {
   const [draft, setDraft] = useState('');
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [permissionQueue, setPermissionQueue] = useState<PermissionRequest[]>([]);
+  const [questionQueue, setQuestionQueue] = useState<QuestionRequest[]>([]);
+  const [respondingID, setRespondingID] = useState<string | null>(null);
 
   useEffect(() => {
     listServers().then(async (servers) => {
@@ -60,6 +69,12 @@ export default function SessionChatScreen() {
       .catch((e) => !cancelled && setError(e instanceof Error ? e.message : 'Falha ao carregar mensagens.'));
     getSession(server, token, sessionId)
       .then((data) => !cancelled && setSessionTitle(data.title))
+      .catch(() => {});
+    listPermissions(server, token)
+      .then((all) => !cancelled && setPermissionQueue(all.filter((p) => p.sessionID === sessionId)))
+      .catch(() => {});
+    listQuestions(server, token)
+      .then((all) => !cancelled && setQuestionQueue(all.filter((q) => q.sessionID === sessionId)))
       .catch(() => {});
 
     // Enquanto o POST de envio está em voo (rota síncrona), o texto do
@@ -87,6 +102,20 @@ export default function SessionChatScreen() {
               }
               return [...list, { info, parts: [] }];
             });
+          } else if (event.type === 'permission.asked') {
+            const req = (event as { properties: PermissionRequest }).properties;
+            if (req.sessionID !== sessionId) continue;
+            setPermissionQueue((prev) => (prev.some((p) => p.id === req.id) ? prev : [...prev, req]));
+          } else if (event.type === 'permission.replied') {
+            const { requestID } = (event as { properties: { requestID: string } }).properties;
+            setPermissionQueue((prev) => prev.filter((p) => p.id !== requestID));
+          } else if (event.type === 'question.asked') {
+            const req = (event as { properties: QuestionRequest }).properties;
+            if (req.sessionID !== sessionId) continue;
+            setQuestionQueue((prev) => (prev.some((q) => q.id === req.id) ? prev : [...prev, req]));
+          } else if (event.type === 'question.replied' || event.type === 'question.rejected') {
+            const { requestID } = (event as { properties: { requestID: string } }).properties;
+            setQuestionQueue((prev) => prev.filter((q) => q.id !== requestID));
           } else if (event.type === 'message.part.updated') {
             const { sessionID, part } = (event as { properties: { sessionID: string; part: Part } }).properties;
             if (sessionID !== sessionId) continue;
@@ -135,6 +164,37 @@ export default function SessionChatScreen() {
     }
   }
 
+  async function handlePermissionReply(req: PermissionRequest, reply: 'once' | 'always' | 'reject') {
+    if (!server || !token || respondingID) return;
+    setRespondingID(req.id);
+    try {
+      await replyPermission(server, token, req.id, reply);
+      setPermissionQueue((prev) => prev.filter((p) => p.id !== req.id));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Falha ao responder permissão.');
+    } finally {
+      setRespondingID(null);
+    }
+  }
+
+  // Suporta a primeira pergunta do lote com resposta única — cobre o
+  // caso comum. Múltiplas perguntas ou resposta customizada por texto
+  // (question.custom) ficam para quando o fluxo realmente precisar.
+  async function handleQuestionAnswer(req: QuestionRequest, label: string) {
+    if (!server || !token || respondingID) return;
+    setRespondingID(req.id);
+    try {
+      await replyQuestion(server, token, req.id, [[label]]);
+      setQuestionQueue((prev) => prev.filter((q) => q.id !== req.id));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Falha ao responder pergunta.');
+    } finally {
+      setRespondingID(null);
+    }
+  }
+
+  const pendingPermission = permissionQueue[0];
+  const pendingQuestion = questionQueue[0];
   const headerTitle = sessionTitle || 'Sessão';
 
   if (server === undefined || messages === null) {
@@ -187,6 +247,58 @@ export default function SessionChatScreen() {
       />
 
       {error && <Text style={styles.error}>{error}</Text>}
+
+      {pendingPermission && (
+        <View style={styles.askCard}>
+          <Text style={styles.askTitle}>Permissão: {pendingPermission.permission}</Text>
+          {pendingPermission.patterns.length > 0 && (
+            <Text style={styles.askSubtitle}>{pendingPermission.patterns.join(', ')}</Text>
+          )}
+          <View style={styles.askActions}>
+            <TouchableOpacity
+              style={[styles.askButton, styles.askButtonReject]}
+              disabled={respondingID === pendingPermission.id}
+              onPress={() => handlePermissionReply(pendingPermission, 'reject')}
+            >
+              <Text style={styles.askButtonTextReject}>Rejeitar</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.askButton}
+              disabled={respondingID === pendingPermission.id}
+              onPress={() => handlePermissionReply(pendingPermission, 'once')}
+            >
+              <Text style={styles.askButtonText}>Uma vez</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.askButton}
+              disabled={respondingID === pendingPermission.id}
+              onPress={() => handlePermissionReply(pendingPermission, 'always')}
+            >
+              <Text style={styles.askButtonText}>Sempre</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      )}
+
+      {!pendingPermission && pendingQuestion && (
+        <View style={styles.askCard}>
+          <Text style={styles.askTitle}>{pendingQuestion.questions[0].header}</Text>
+          <Text style={styles.askSubtitle}>{pendingQuestion.questions[0].question}</Text>
+          <View style={styles.askOptions}>
+            {pendingQuestion.questions[0].options.map((opt) => (
+              <TouchableOpacity
+                key={opt.label}
+                style={styles.askOption}
+                disabled={respondingID === pendingQuestion.id}
+                onPress={() => handleQuestionAnswer(pendingQuestion, opt.label)}
+              >
+                <Text style={styles.askOptionLabel}>{opt.label}</Text>
+                <Text style={styles.askOptionDescription}>{opt.description}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        </View>
+      )}
 
       <View style={[styles.composer, { paddingBottom: insets.bottom + 12 }]}>
         <TextInput
@@ -256,6 +368,71 @@ const styles = StyleSheet.create({
   bubbleTextAssistant: {
     color: '#111827',
     fontSize: 15,
+  },
+  askCard: {
+    marginHorizontal: 12,
+    marginBottom: 8,
+    padding: 14,
+    borderRadius: 12,
+    backgroundColor: '#fffbeb',
+    borderWidth: 1,
+    borderColor: '#fde68a',
+    gap: 8,
+  },
+  askTitle: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#92400e',
+  },
+  askSubtitle: {
+    fontSize: 13,
+    color: '#78716c',
+  },
+  askActions: {
+    flexDirection: 'row',
+    gap: 8,
+    marginTop: 4,
+  },
+  askButton: {
+    flex: 1,
+    backgroundColor: '#2563eb',
+    borderRadius: 10,
+    paddingVertical: 10,
+    alignItems: 'center',
+  },
+  askButtonReject: {
+    backgroundColor: '#fee2e2',
+  },
+  askButtonText: {
+    color: '#fff',
+    fontWeight: '600',
+    fontSize: 13,
+  },
+  askButtonTextReject: {
+    color: '#b91c1c',
+    fontWeight: '600',
+    fontSize: 13,
+  },
+  askOptions: {
+    gap: 8,
+    marginTop: 4,
+  },
+  askOption: {
+    borderWidth: 1,
+    borderColor: '#fde68a',
+    borderRadius: 10,
+    padding: 10,
+    backgroundColor: '#fff',
+  },
+  askOptionLabel: {
+    fontWeight: '600',
+    fontSize: 14,
+    color: '#111827',
+  },
+  askOptionDescription: {
+    fontSize: 12,
+    color: '#6b7280',
+    marginTop: 2,
   },
   composer: {
     flexDirection: 'row',

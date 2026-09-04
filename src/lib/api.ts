@@ -43,14 +43,51 @@ export type MessageWithParts = {
   parts: Part[];
 };
 
+// Conferido contra packages/schema/src/v1/{permission,question}.ts no
+// repo do fork — são as rotas "v1" ativas (/permission, /question);
+// existe também um schema "v2" em desenvolvimento que este app não usa.
+export type PermissionRequest = {
+  id: string;
+  sessionID: string;
+  permission: string;
+  patterns: string[];
+  tool?: { messageID: string; callID: string };
+};
+
+export type PermissionReply = 'once' | 'always' | 'reject';
+
+export type QuestionOption = {
+  label: string;
+  description: string;
+};
+
+export type QuestionInfo = {
+  question: string;
+  header: string;
+  options: QuestionOption[];
+  multiple?: boolean;
+  custom?: boolean;
+};
+
+export type QuestionRequest = {
+  id: string;
+  sessionID: string;
+  questions: QuestionInfo[];
+};
+
 export type SessionEvent =
   | { type: 'session.created'; properties: { sessionID: string; info: Session } }
   | { type: 'session.updated'; properties: { sessionID: string; info: Session } }
   | { type: 'session.deleted'; properties: { sessionID: string; info: Session } }
   | { type: 'message.updated'; properties: { sessionID: string; info: Message } }
   | { type: 'message.part.updated'; properties: { sessionID: string; part: Part } }
-  // Qualquer outro tipo de evento do fork (permission.*, etc.) — o app
-  // ignora por enquanto, mas não deve quebrar ao recebê-los.
+  | { type: 'permission.asked'; properties: PermissionRequest }
+  | { type: 'permission.replied'; properties: { sessionID: string; requestID: string } }
+  | { type: 'question.asked'; properties: QuestionRequest }
+  | { type: 'question.replied'; properties: { sessionID: string; requestID: string } }
+  | { type: 'question.rejected'; properties: { sessionID: string; requestID: string } }
+  // Qualquer outro tipo de evento do fork (mcp.*, project.*, etc.) — o
+  // app ignora por enquanto, mas não deve quebrar ao recebê-los.
   | { type: string; properties?: unknown };
 
 function authedUrl(server: ServerConnection, token: string, path: string): string {
@@ -106,6 +143,63 @@ export async function sendPrompt(
     throw new Error(`POST /session/${sessionID}/message falhou: ${res.status}`);
   }
   return (await res.json()) as MessageWithParts;
+}
+
+export async function listPermissions(server: ServerConnection, token: string): Promise<PermissionRequest[]> {
+  const res = await fetch(authedUrl(server, token, '/permission'));
+  if (!res.ok) {
+    throw new Error(`GET /permission falhou: ${res.status}`);
+  }
+  return (await res.json()) as PermissionRequest[];
+}
+
+export async function listQuestions(server: ServerConnection, token: string): Promise<QuestionRequest[]> {
+  const res = await fetch(authedUrl(server, token, '/question'));
+  if (!res.ok) {
+    throw new Error(`GET /question falhou: ${res.status}`);
+  }
+  return (await res.json()) as QuestionRequest[];
+}
+
+export async function replyPermission(
+  server: ServerConnection,
+  token: string,
+  requestID: string,
+  reply: PermissionReply
+): Promise<void> {
+  const res = await fetch(authedUrl(server, token, `/permission/${requestID}/reply`), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ reply }),
+  });
+  if (!res.ok) {
+    throw new Error(`POST /permission/${requestID}/reply falhou: ${res.status}`);
+  }
+}
+
+// `answers` segue a mesma ordem de `QuestionRequest.questions` — uma
+// entrada por pergunta, cada uma com os labels selecionados.
+export async function replyQuestion(
+  server: ServerConnection,
+  token: string,
+  requestID: string,
+  answers: string[][]
+): Promise<void> {
+  const res = await fetch(authedUrl(server, token, `/question/${requestID}/reply`), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ answers }),
+  });
+  if (!res.ok) {
+    throw new Error(`POST /question/${requestID}/reply falhou: ${res.status}`);
+  }
+}
+
+export async function rejectQuestion(server: ServerConnection, token: string, requestID: string): Promise<void> {
+  const res = await fetch(authedUrl(server, token, `/question/${requestID}/reject`), { method: 'POST' });
+  if (!res.ok) {
+    throw new Error(`POST /question/${requestID}/reject falhou: ${res.status}`);
+  }
 }
 
 // Parser mínimo de Server-Sent Events sobre o streaming reader do
