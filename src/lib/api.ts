@@ -120,6 +120,15 @@ export type SelectedModel = {
   modelID: string;
 };
 
+// GET /command — unifica comandos de skill, MCP e comandos normais
+// (source: "command"|"mcp"|"skill") num só catálogo. É o que
+// alimenta o autocomplete de "/" no composer.
+export type Command = {
+  name: string;
+  description?: string;
+  source?: 'command' | 'mcp' | 'skill';
+};
+
 export type SessionEvent =
   | { type: 'session.created'; properties: { sessionID: string; info: Session } }
   | { type: 'session.updated'; properties: { sessionID: string; info: Session } }
@@ -135,10 +144,52 @@ export type SessionEvent =
   // app ignora por enquanto, mas não deve quebrar ao recebê-los.
   | { type: string; properties?: unknown };
 
+// Erros do fork vêm como JSON ({name, data: {message}}) — mostrar só
+// o status HTTP escondia a causa real (ex.: "Missing key at
+// [\"model\"][\"modelID\"]"), o que tornou um bug de nome de campo
+// difícil de diagnosticar até testar contra o servidor na mão.
+async function errorDetail(res: Response): Promise<string> {
+  try {
+    const body = await res.json();
+    return body?.data?.message || body?.message || JSON.stringify(body);
+  } catch {
+    return res.statusText;
+  }
+}
+
 function authedUrl(server: ServerConnection, token: string, path: string): string {
   const url = new URL(path, server.url);
   url.searchParams.set('auth_token', token);
   return url.toString();
+}
+
+export async function listCommands(server: ServerConnection, token: string): Promise<Command[]> {
+  const res = await fetch(authedUrl(server, token, '/command'));
+  if (!res.ok) {
+    throw new Error(`GET /command falhou: ${await errorDetail(res)}`);
+  }
+  return (await res.json()) as Command[];
+}
+
+// POST /session/:id/command — conferido contra
+// packages/opencode/src/session/prompt.ts (CommandInput): `command` e
+// `arguments` são obrigatórios (arguments pode ser string vazia).
+export async function runCommand(
+  server: ServerConnection,
+  token: string,
+  sessionID: string,
+  command: string,
+  args: string
+): Promise<MessageWithParts> {
+  const res = await fetch(authedUrl(server, token, `/session/${sessionID}/command`), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ command, arguments: args }),
+  });
+  if (!res.ok) {
+    throw new Error(`POST /session/${sessionID}/command falhou: ${await errorDetail(res)}`);
+  }
+  return (await res.json()) as MessageWithParts;
 }
 
 export async function listProviders(server: ServerConnection, token: string): Promise<ProviderList> {
@@ -211,7 +262,7 @@ export async function createSession(
     body: JSON.stringify(agent ? { agent } : {}),
   });
   if (!res.ok) {
-    throw new Error(`POST /session falhou: ${res.status}`);
+    throw new Error(`POST /session falhou: ${await errorDetail(res)}`);
   }
   return (await res.json()) as Session;
 }
@@ -266,11 +317,15 @@ export async function sendPrompt(
     body: JSON.stringify({
       parts: [{ type: 'text', text }],
       ...(agent ? { agent } : {}),
-      ...(model ? { model: { id: model.modelID, providerID: model.providerID } } : {}),
+      // Testado direto contra o servidor: o campo é `modelID`, não
+      // `id` como uma pesquisa anterior (baseada no código do
+      // desktop) tinha indicado — POST real devolvia
+      // `Missing key at ["model"]["modelID"]` até essa correção.
+      ...(model ? { model: { modelID: model.modelID, providerID: model.providerID } } : {}),
     }),
   });
   if (!res.ok) {
-    throw new Error(`POST /session/${sessionID}/message falhou: ${res.status}`);
+    throw new Error(`POST /session/${sessionID}/message falhou: ${await errorDetail(res)}`);
   }
   return (await res.json()) as MessageWithParts;
 }
@@ -293,7 +348,7 @@ export async function runShell(
     body: JSON.stringify({ agent, command }),
   });
   if (!res.ok) {
-    throw new Error(`POST /session/${sessionID}/shell falhou: ${res.status}`);
+    throw new Error(`POST /session/${sessionID}/shell falhou: ${await errorDetail(res)}`);
   }
   return (await res.json()) as MessageWithParts;
 }

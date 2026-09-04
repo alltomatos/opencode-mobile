@@ -15,8 +15,10 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import {
+  Command,
   getSession,
   listChildren,
+  listCommands,
   listMessages,
   listPermissions,
   listProviders,
@@ -29,6 +31,7 @@ import {
   QuestionRequest,
   replyPermission,
   replyQuestion,
+  runCommand,
   SelectedModel,
   sendPrompt,
   Session,
@@ -82,6 +85,7 @@ export default function SessionChatScreen() {
   const [model, setModel] = useState<SelectedModel | null>(null);
   const [showModePicker, setShowModePicker] = useState(false);
   const [showModelPicker, setShowModelPicker] = useState(false);
+  const [commands, setCommands] = useState<Command[]>([]);
 
   useEffect(() => {
     listServers().then(async (servers) => {
@@ -109,6 +113,9 @@ export default function SessionChatScreen() {
       .catch(() => {});
     listChildren(server, token, sessionId)
       .then((data) => !cancelled && setChildren(data))
+      .catch(() => {});
+    listCommands(server, token)
+      .then((data) => !cancelled && setCommands(data))
       .catch(() => {});
     listProviders(server, token)
       .then((data) => {
@@ -212,9 +219,41 @@ export default function SessionChatScreen() {
     }
   }, [mode, server, token, permissionQueue]);
 
+  const commandSuggestions =
+    draft.startsWith('/') && !draft.includes(' ')
+      ? commands.filter((c) => c.name.toLowerCase().startsWith(draft.slice(1).toLowerCase()))
+      : [];
+
+  async function runSelectedCommand(name: string, args: string) {
+    if (!server || !token || sending) return;
+    setSending(true);
+    setDraft('');
+    setError(null);
+    try {
+      await runCommand(server, token, sessionId, name, args);
+      const fresh = await listMessages(server, token, sessionId);
+      setMessages(fresh);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Falha ao rodar comando.');
+    } finally {
+      setSending(false);
+    }
+  }
+
   async function handleSend() {
     const text = draft.trim();
     if (!text || !server || !token || sending) return;
+
+    // "/nome args" roda via POST /session/:id/command, não como texto
+    // — /model digitado como mensagem normal só faz o assistente
+    // *explicar* o comando (confirmado ao testar), não executá-lo.
+    if (text.startsWith('/')) {
+      const [name, ...rest] = text.slice(1).split(' ');
+      if (commands.some((c) => c.name === name)) {
+        await runSelectedCommand(name, rest.join(' '));
+        return;
+      }
+    }
 
     setSending(true);
     setDraft('');
@@ -384,6 +423,28 @@ export default function SessionChatScreen() {
               </TouchableOpacity>
             ))}
           </View>
+        </View>
+      )}
+
+      {commandSuggestions.length > 0 && (
+        <View style={styles.suggestions}>
+          {commandSuggestions.slice(0, 6).map((c) => (
+            <TouchableOpacity
+              key={c.name}
+              style={styles.suggestionRow}
+              onPress={() => runSelectedCommand(c.name, '')}
+            >
+              <Text style={styles.suggestionName}>/{c.name}</Text>
+              {c.description && (
+                <Text style={styles.suggestionDescription} numberOfLines={1}>
+                  {c.description}
+                </Text>
+              )}
+              {c.source && c.source !== 'command' && (
+                <Text style={styles.suggestionSource}>{c.source}</Text>
+              )}
+            </TouchableOpacity>
+          ))}
         </View>
       )}
 
@@ -681,6 +742,40 @@ function createStyles(theme: Theme) {
     modalOptionTextActive: {
       color: theme.accent,
       fontWeight: '700',
+    },
+    suggestions: {
+      marginHorizontal: 12,
+      marginBottom: 4,
+      borderRadius: 10,
+      backgroundColor: theme.surface,
+      borderWidth: 1,
+      borderColor: theme.border,
+      overflow: 'hidden',
+    },
+    suggestionRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+      paddingHorizontal: 12,
+      paddingVertical: 10,
+      borderBottomWidth: StyleSheet.hairlineWidth,
+      borderBottomColor: theme.border,
+    },
+    suggestionName: {
+      fontWeight: '700',
+      color: theme.accent,
+      fontSize: 14,
+    },
+    suggestionDescription: {
+      flex: 1,
+      color: theme.textDim,
+      fontSize: 12,
+    },
+    suggestionSource: {
+      fontSize: 10,
+      fontWeight: '700',
+      color: theme.textFaint,
+      textTransform: 'uppercase',
     },
     composer: {
       flexDirection: 'row',
