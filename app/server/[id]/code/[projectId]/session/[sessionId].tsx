@@ -347,7 +347,13 @@ export default function SessionChatScreen() {
   return (
     <KeyboardAvoidingView
       style={styles.container}
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      // Android já redimensiona a janela sozinho quando o teclado abre
+      // (app.json não define android.softwareKeyboardLayoutMode, então
+      // o default do Expo — "resize" — vale). Dar um `behavior` aqui
+      // também fazia o RN encolher a área de novo em cima do
+      // encolhimento do próprio SO, subtraindo a altura do teclado
+      // duas vezes e sumindo com o composer.
+      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       keyboardVerticalOffset={Platform.OS === 'ios' ? insets.top : 0}
     >
       <Stack.Screen options={{ title: headerTitle }} />
