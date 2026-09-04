@@ -1,12 +1,14 @@
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { Button, FlatList, StyleSheet, Text, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { listSessions, Session, subscribeEvents } from '../../src/lib/api';
 import { getServerToken, listServers, removeServer, ServerConnection } from '../../src/lib/servers';
 
 export default function ServerSessionsScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
+  const insets = useSafeAreaInsets();
   const [server, setServer] = useState<ServerConnection | null | undefined>(undefined);
   const [token, setToken] = useState<string | null>(null);
   const [sessions, setSessions] = useState<Session[] | null>(null);
@@ -71,7 +73,7 @@ export default function ServerSessionsScreen() {
   }
 
   return (
-    <View style={styles.list}>
+    <View style={[styles.list, { paddingBottom: insets.bottom + 16 }]}>
       <View style={styles.header}>
         <Text style={styles.title}>{server.label}</Text>
         <Text style={styles.subtitle}>{server.url}</Text>

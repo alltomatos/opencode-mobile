@@ -1,11 +1,13 @@
 import { Link, useFocusEffect } from 'expo-router';
 import { useCallback, useState } from 'react';
 import { FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { listServers, ServerConnection } from '../src/lib/servers';
 
 export default function ServerListScreen() {
   const [servers, setServers] = useState<ServerConnection[] | null>(null);
+  const insets = useSafeAreaInsets();
 
   useFocusEffect(
     useCallback(() => {
@@ -45,7 +47,7 @@ export default function ServerListScreen() {
           </Link>
         )}
       />
-      <Link href="/pair" style={styles.addLink}>
+      <Link href="/pair" style={[styles.addLink, { paddingBottom: insets.bottom + 16 }]}>
         + Parear novo servidor
       </Link>
     </View>
