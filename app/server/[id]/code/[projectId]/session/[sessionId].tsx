@@ -47,6 +47,7 @@ import {
   ThinkingRow,
   ToolCard,
 } from '../../../../../../src/components/ActivityParts';
+import { notifyAgentDone, notifyError, notifyPermissionAsked } from '../../../../../../src/lib/notifications';
 import { getProjectModel, projectModelKey, setProjectModel, useSettings } from '../../../../../../src/lib/settings';
 
 // Ver docs/prd/mobile-app.md §6.1, item 3 — "modo" no app de referência
@@ -135,6 +136,13 @@ export default function SessionChatScreen() {
   const [mode, setMode] = useState<Mode>('manual');
   const modeRef = useRef<Mode>('manual');
   modeRef.current = mode;
+  // Ref porque a notificação é disparada de dentro do loop de eventos
+  // SSE (useEffect com deps [server, token, sessionId]) — sem isso, o
+  // toggle de Configurações mudado depois de montar a tela nunca seria
+  // enxergado ali (closure presa ao valor de `settings` de quando o
+  // efeito rodou pela última vez).
+  const settingsRef = useRef(settings);
+  settingsRef.current = settings;
   const [children, setChildren] = useState<Session[]>([]);
   const [sessionStatus, setSessionStatus] = useState<SessionStatus | null>(null);
   const [keyboardHeight, setKeyboardHeight] = useState(0);
@@ -261,6 +269,7 @@ export default function SessionChatScreen() {
               continue;
             }
             setPermissionQueue((prev) => (prev.some((p) => p.id === req.id) ? prev : [...prev, req]));
+            notifyPermissionAsked(settingsRef.current, req.permission);
           } else if (event.type === 'permission.replied') {
             const { requestID } = (event as { properties: { requestID: string } }).properties;
             setPermissionQueue((prev) => prev.filter((p) => p.id !== requestID));
@@ -268,6 +277,7 @@ export default function SessionChatScreen() {
             const req = (event as { properties: QuestionRequest }).properties;
             if (req.sessionID !== sessionId) continue;
             setQuestionQueue((prev) => (prev.some((q) => q.id === req.id) ? prev : [...prev, req]));
+            notifyPermissionAsked(settingsRef.current, req.questions[0]?.header ?? 'pergunta do agente');
           } else if (event.type === 'question.replied' || event.type === 'question.rejected') {
             const { requestID } = (event as { properties: { requestID: string } }).properties;
             setQuestionQueue((prev) => prev.filter((q) => q.id !== requestID));
@@ -358,7 +368,9 @@ export default function SessionChatScreen() {
       const fresh = await listMessages(server, token, sessionId);
       setMessages(fresh);
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Falha ao rodar comando.');
+      const message = e instanceof Error ? e.message : 'Falha ao rodar comando.';
+      setError(message);
+      notifyError(settings, message);
     }
   }
 
@@ -387,7 +399,9 @@ export default function SessionChatScreen() {
       setMessages(fresh);
       setSessionTitle(session.title);
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Falha ao enviar mensagem.');
+      const message = e instanceof Error ? e.message : 'Falha ao enviar mensagem.';
+      setError(message);
+      notifyError(settings, message);
     }
   }
 
@@ -420,6 +434,10 @@ export default function SessionChatScreen() {
       text = dequeue();
     }
     setSending(false);
+    // Só notifica quando a fila inteira esvaziou — se ainda tem
+    // mensagem enfileirada, o usuário sabe que o app continua
+    // trabalhando (não faz sentido notificar "terminei" no meio).
+    notifyAgentDone(settings, sessionTitle ?? 'Sessão');
   }
 
   async function handleSend() {

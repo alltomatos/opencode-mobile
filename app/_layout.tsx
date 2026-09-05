@@ -1,9 +1,11 @@
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
+import { useEffect } from 'react';
 import { useColorScheme } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
-import { SettingsContext, useSettingsState } from '../src/lib/settings';
+import { syncNotificationChannels } from '../src/lib/notifications';
+import { SettingsContext, useSettings, useSettingsState } from '../src/lib/settings';
 import { useTheme } from '../src/lib/theme';
 
 // A barra de abas (Servidores/Configurações) só existe no nível raiz —
@@ -13,6 +15,14 @@ import { useTheme } from '../src/lib/theme';
 function RootNavigator() {
   const theme = useTheme();
   const scheme = useColorScheme();
+  const { settings } = useSettings();
+
+  // Os canais de notificação do Android guardam som/vibração — refaz
+  // sempre que esses toggles mudam em Configurações (a função
+  // sobrescreve o canal existente, não duplica).
+  useEffect(() => {
+    syncNotificationChannels(settings).catch(() => {});
+  }, [settings.notificationSound, settings.notificationVibration]);
 
   return (
     <SafeAreaProvider>

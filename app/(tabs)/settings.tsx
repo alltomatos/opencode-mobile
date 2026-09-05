@@ -1,8 +1,13 @@
 import Constants from 'expo-constants';
-import { StyleSheet, Switch, Text, View } from 'react-native';
+import { useEffect, useState } from 'react';
+import { Platform, StyleSheet, Switch, Text, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { ThemeOverride, useSettings } from '../../src/lib/settings';
+import {
+  getNotificationPermissionStatus,
+  requestNotificationPermission,
+} from '../../src/lib/notifications';
+import { NotificationCategory, ThemeOverride, useSettings } from '../../src/lib/settings';
 import { Theme, useTheme } from '../../src/lib/theme';
 
 const THEME_OPTIONS: { value: ThemeOverride; label: string }[] = [
@@ -11,11 +16,34 @@ const THEME_OPTIONS: { value: ThemeOverride; label: string }[] = [
   { value: 'dark', label: 'Escuro' },
 ];
 
+const NOTIFICATION_CATEGORIES: { key: NotificationCategory; label: string; hint: string }[] = [
+  { key: 'agentDone', label: 'Resposta do agente', hint: 'Avisa quando o agente termina de responder.' },
+  { key: 'permissions', label: 'Pedidos de permissão', hint: 'Avisa quando o agente precisa de autorização pra agir.' },
+  { key: 'errors', label: 'Erros', hint: 'Avisa quando um envio ou comando falha.' },
+];
+
 export default function SettingsScreen() {
   const insets = useSafeAreaInsets();
   const theme = useTheme();
   const styles = createStyles(theme);
   const { settings, update } = useSettings();
+  const [permissionStatus, setPermissionStatus] = useState<'granted' | 'denied' | 'undetermined' | null>(null);
+
+  useEffect(() => {
+    getNotificationPermissionStatus().then(setPermissionStatus);
+  }, []);
+
+  async function handleToggleCategory(key: NotificationCategory, value: boolean) {
+    // Só pede a permissão do sistema na hora que a pessoa realmente
+    // tenta ligar alguma notificação — não no boot do app, pra não
+    // assustar com um popup de permissão antes de fazer sentido.
+    if (value && permissionStatus !== 'granted') {
+      const granted = await requestNotificationPermission();
+      setPermissionStatus(granted ? 'granted' : 'denied');
+      if (!granted) return;
+    }
+    update({ notifications: { ...settings.notifications, [key]: value } });
+  }
 
   return (
     <View style={[styles.container, { paddingBottom: insets.bottom + 24 }]}>
@@ -69,6 +97,55 @@ export default function SettingsScreen() {
           />
         </View>
       </View>
+
+      <Text style={styles.sectionLabel}>Notificações</Text>
+      <View style={styles.card}>
+        {permissionStatus === 'denied' && (
+          <Text style={styles.warnText}>
+            Permissão de notificação negada pelo sistema. Ative em Ajustes do Android/iOS pra essas opções
+            funcionarem.
+          </Text>
+        )}
+        {NOTIFICATION_CATEGORIES.map((cat, i) => (
+          <View key={cat.key}>
+            {i > 0 && <View style={styles.divider} />}
+            <View style={styles.switchRow}>
+              <View style={styles.switchLabel}>
+                <Text style={styles.rowTitle}>{cat.label}</Text>
+                <Text style={styles.rowSubtitle}>{cat.hint}</Text>
+              </View>
+              <Switch
+                value={settings.notifications[cat.key]}
+                onValueChange={(value) => handleToggleCategory(cat.key, value)}
+                trackColor={{ true: theme.accent, false: theme.border }}
+              />
+            </View>
+          </View>
+        ))}
+        <View style={styles.divider} />
+        <View style={styles.switchRow}>
+          <Text style={[styles.rowTitle, styles.switchLabel]}>Som</Text>
+          <Switch
+            value={settings.notificationSound}
+            onValueChange={(value) => update({ notificationSound: value })}
+            trackColor={{ true: theme.accent, false: theme.border }}
+          />
+        </View>
+        <View style={styles.divider} />
+        <View style={styles.switchRow}>
+          <Text style={[styles.rowTitle, styles.switchLabel]}>Vibração</Text>
+          <Switch
+            value={settings.notificationVibration}
+            onValueChange={(value) => update({ notificationVibration: value })}
+            trackColor={{ true: theme.accent, false: theme.border }}
+          />
+        </View>
+      </View>
+      <Text style={styles.hintBelow}>
+        {Platform.OS === 'android'
+          ? 'Notificações locais — disparadas pelo próprio app enquanto ele está aberto ou recém-minimizado. Não chegam com o app fechado pelo sistema (isso exigiria um build próprio, fora do Expo Go).'
+          : 'Notificações locais — disparadas pelo próprio app enquanto ele está aberto ou recém-minimizado.'}
+      </Text>
 
       <Text style={styles.sectionLabel}>Sobre</Text>
       <View style={styles.card}>
@@ -150,6 +227,21 @@ function createStyles(theme: Theme) {
     divider: {
       height: StyleSheet.hairlineWidth,
       backgroundColor: theme.border,
+    },
+    warnText: {
+      fontSize: 12,
+      color: theme.warnText,
+      backgroundColor: theme.warnBg,
+      borderWidth: 1,
+      borderColor: theme.warnBorder,
+      borderRadius: 8,
+      padding: 8,
+    },
+    hintBelow: {
+      fontSize: 11,
+      color: theme.textFaint,
+      marginTop: -12,
+      lineHeight: 15,
     },
     aboutRow: {
       flexDirection: 'row',

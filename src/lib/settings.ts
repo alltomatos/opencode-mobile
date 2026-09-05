@@ -13,16 +13,31 @@ import { createContext, useContext, useEffect, useState } from 'react';
 //   do desktop (abrir tool cards já expandidos, sem precisar tocar).
 export type ThemeOverride = 'system' | 'light' | 'dark';
 
+// Espelha packages/app/src/context/settings.tsx `notifications`/
+// `sounds` — lá são objetos separados (um bool de liga/desliga o som
+// + o nome do arquivo por categoria); no mobile o som e a vibração são
+// controlados pelo canal de notificação do Android e pelo campo
+// `sound` da notificação, então simplificamos pra um toggle de
+// som e um de vibração GLOBAIS, cruzados com o toggle POR categoria
+// (agente/permissão/erro) que é o que realmente decide se dispara.
+export type NotificationCategory = 'agentDone' | 'permissions' | 'errors';
+
 export type AppSettings = {
   themeOverride: ThemeOverride;
   showReasoningSummaries: boolean;
   toolPartsExpanded: boolean;
+  notifications: Record<NotificationCategory, boolean>;
+  notificationSound: boolean;
+  notificationVibration: boolean;
 };
 
 export const DEFAULT_SETTINGS: AppSettings = {
   themeOverride: 'system',
   showReasoningSummaries: false,
   toolPartsExpanded: false,
+  notifications: { agentDone: true, permissions: true, errors: true },
+  notificationSound: true,
+  notificationVibration: true,
 };
 
 const STORAGE_KEY = 'opencode-mobile:settings';
