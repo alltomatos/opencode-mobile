@@ -2,16 +2,9 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { Button, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 
-import { createSession, extractOutput, PROJECTS_ROOT, runShell } from '../../../../src/lib/api';
+import { PROJECTS_ROOT, runManagedShell } from '../../../../src/lib/api';
 import { getServerToken, listServers, ServerConnection } from '../../../../src/lib/servers';
 import { Theme, useTheme } from '../../../../src/lib/theme';
-
-// Padroniza projetos em /home/opencode/projects/<nome> (pedido do
-// usuário). Não existe endpoint de mkdir/clone dedicado — o caminho
-// aqui é criar uma sessão "bootstrap" ancorada em /home/opencode (que
-// sempre existe, é o home do usuário do servidor) e rodar
-// mkdir/git clone via POST /session/:id/shell.
-const BOOTSTRAP_DIRECTORY = '/home/opencode';
 
 function slugFromGithubUrl(url: string): string | null {
   const match = url.trim().match(/github\.com[/:]([^/]+)\/([^/]+?)(\.git)?\/?$/i);
@@ -55,28 +48,16 @@ export default function AddProjectScreen() {
     setSaving(true);
     setError(null);
     try {
-      setStatus('Preparando…');
-      const bootstrap = await createSession(server, token, BOOTSTRAP_DIRECTORY);
-
       // `git init` na pasta nova é só um bônus (a maioria de projeto de
       // código já nasce versionado) — a listagem do app não depende
       // disso, ela lista pastas de verdade em PROJECTS_ROOT via
       // GET /file, então uma pasta sem git aparece do mesmo jeito.
-      // O marcador no fim só imprime se a cadeia inteira (`&&`) deu
-      // certo — POST /session/:id/shell responde 200 mesmo quando o
-      // comando falha (ex.: clonar repo privado sem credencial), então
-      // sem isso o app "acha" que deu certo mesmo tendo falhado.
-      const OK_MARKER = '___OPENCODE_MOBILE_OK___';
       const command =
         mode === 'github'
-          ? `git clone "${githubUrl.trim()}" "${fullPath}" && echo ${OK_MARKER}`
-          : `mkdir -p "${fullPath}" && git -C "${fullPath}" init && echo ${OK_MARKER}`;
+          ? `git clone "${githubUrl.trim()}" "${fullPath}"`
+          : `mkdir -p "${fullPath}" && git -C "${fullPath}" init`;
       setStatus(mode === 'github' ? 'Clonando repositório…' : 'Criando pasta…');
-      const result = await runShell(server, token, bootstrap.id, command);
-      const output = extractOutput(result);
-      if (!output.includes(OK_MARKER)) {
-        throw new Error(output.trim() || 'O comando não terminou como esperado.');
-      }
+      await runManagedShell(server, token, command);
 
       router.replace(`/server/${id}/code/${encodeURIComponent(fullPath)}`);
     } catch (e) {

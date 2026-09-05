@@ -404,6 +404,28 @@ export async function getSession(server: ServerConnection, token: string, sessio
   return (await res.json()) as Session;
 }
 
+// DELETE /session/:id — conferido em
+// packages/opencode/src/session/session.ts (remove): apaga em cascata
+// as sessões filhas (subagents) primeiro, depois a sessão em si —
+// mensagens e partes junto (a doc da rota diz literalmente "permanently
+// remove all associated data, including messages and history"). Não
+// tem confirmação nenhuma do lado do servidor; quem decide se confirma
+// com o usuário antes é o app.
+export async function deleteSession(
+  server: ServerConnection,
+  token: string,
+  sessionID: string,
+  directory: string
+): Promise<void> {
+  const url = new URL(`/session/${sessionID}`, server.url);
+  url.searchParams.set('auth_token', token);
+  url.searchParams.set('directory', directory);
+  const res = await fetch(url.toString(), { method: 'DELETE' });
+  if (!res.ok) {
+    throw new Error(`DELETE /session/${sessionID} falhou: ${await errorDetail(res)}`);
+  }
+}
+
 export async function listMessages(
   server: ServerConnection,
   token: string,
@@ -470,6 +492,44 @@ export async function runShell(
   return (await res.json()) as MessageWithParts;
 }
 
+// Ancora comandos avulsos (mkdir/git clone/rm) numa sessão descartável
+// em /home/opencode — mesmo mecanismo do bootstrap em
+// app/server/[id]/code/add.tsx, centralizado aqui pra reusar também no
+// apagar-projeto. POST /session/:id/shell responde 200 mesmo quando o
+// comando falha (ver fork-map.md), então o marcador `&&` no fim é
+// obrigatório pra saber se deu certo de verdade.
+const BOOTSTRAP_DIRECTORY = '/home/opencode';
+
+export async function runManagedShell(server: ServerConnection, token: string, command: string): Promise<string> {
+  const bootstrap = await createSession(server, token, BOOTSTRAP_DIRECTORY);
+  const OK_MARKER = '___OPENCODE_MOBILE_OK___';
+  const result = await runShell(server, token, bootstrap.id, `${command} && echo ${OK_MARKER}`);
+  const output = extractOutput(result);
+  if (!output.includes(OK_MARKER)) {
+    throw new Error(output.trim() || 'O comando não terminou como esperado.');
+  }
+  return output;
+}
+
+// Não existe rota de servidor pra apagar um projeto/pasta (conferido
+// em packages/opencode/src/server/routes/instance/httpapi/groups/
+// project.ts — só GET/PATCH, nenhum DELETE) — a única forma real é
+// `rm -rf` via shell. Apaga também o histórico de sessões daquele
+// diretório (senão ficam sessões órfãs apontando pra uma pasta que não
+// existe mais), então quem chama deve ter a lista de sessões da pasta
+// primeiro e passar os ids aqui.
+export async function deleteProjectFolder(
+  server: ServerConnection,
+  token: string,
+  directory: string,
+  sessionIDs: string[]
+): Promise<void> {
+  for (const id of sessionIDs) {
+    await deleteSession(server, token, id, directory).catch(() => {});
+  }
+  await runManagedShell(server, token, `rm -rf "${directory}"`);
+}
+
 export async function listPermissions(server: ServerConnection, token: string): Promise<PermissionRequest[]> {
   const res = await fetch(authedUrl(server, token, '/permission'));
   if (!res.ok) {
@@ -524,6 +584,69 @@ export async function rejectQuestion(server: ServerConnection, token: string, re
   const res = await fetch(authedUrl(server, token, `/question/${requestID}/reject`), { method: 'POST' });
   if (!res.ok) {
     throw new Error(`POST /question/${requestID}/reject falhou: ${res.status}`);
+  }
+}
+
+// Sistema de memória (packages/opencode/src/memory/index.ts) — guarda
+// arquivos markdown em disco (global ou por projeto), NÃO tem API HTTP
+// pra listar/ver entradas individuais (confirmado: só o servidor lê via
+// as tools memory_search/memory_save). A API só permite: ligar/desligar
+// globalmente, checar "esse projeto tem memória?" e apagar tudo daquele
+// projeto de uma vez — mesmas rotas usadas pelo desktop
+// (settings-v2/memory.tsx e dialog-forget-project-memory.tsx).
+export type MemoryConfig = {
+  enabled?: boolean;
+  memoryModel?: string;
+};
+
+export async function getMemoryConfig(server: ServerConnection, token: string): Promise<MemoryConfig> {
+  const res = await fetch(authedUrl(server, token, '/memory'));
+  if (!res.ok) {
+    throw new Error(`GET /memory falhou: ${res.status}`);
+  }
+  return (await res.json()) as MemoryConfig;
+}
+
+export async function setMemoryConfig(
+  server: ServerConnection,
+  token: string,
+  config: MemoryConfig
+): Promise<void> {
+  const res = await fetch(authedUrl(server, token, '/memory'), {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(config),
+  });
+  if (!res.ok) {
+    throw new Error(`PUT /memory falhou: ${await errorDetail(res)}`);
+  }
+}
+
+export async function getProjectMemoryStatus(
+  server: ServerConnection,
+  token: string,
+  directory: string
+): Promise<boolean> {
+  const url = new URL('/memory/project', server.url);
+  url.searchParams.set('auth_token', token);
+  url.searchParams.set('directory', directory);
+  const res = await fetch(url.toString());
+  if (!res.ok) return false;
+  const body = (await res.json()) as { hasMemory?: boolean };
+  return !!body.hasMemory;
+}
+
+export async function deleteProjectMemory(
+  server: ServerConnection,
+  token: string,
+  directory: string
+): Promise<void> {
+  const url = new URL('/memory/project', server.url);
+  url.searchParams.set('auth_token', token);
+  url.searchParams.set('directory', directory);
+  const res = await fetch(url.toString(), { method: 'DELETE' });
+  if (!res.ok) {
+    throw new Error(`DELETE /memory/project falhou: ${res.status}`);
   }
 }
 

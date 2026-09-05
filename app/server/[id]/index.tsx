@@ -1,10 +1,10 @@
 import { Link, router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { Button, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Button, Pressable, StyleSheet, Switch, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { StatusDot } from '../../../src/components/StatusDot';
-import { ServerHealth } from '../../../src/lib/api';
+import { getMemoryConfig, ServerHealth, setMemoryConfig } from '../../../src/lib/api';
 import {
   describeConnection,
   getServerToken,
@@ -39,16 +39,34 @@ export default function ServerHubScreen() {
   const theme = useTheme();
   const styles = createStyles(theme);
   const [server, setServer] = useState<ServerConnection | null | undefined>(undefined);
+  const [token, setToken] = useState<string | null>(null);
+  const [memoryEnabled, setMemoryEnabled] = useState<boolean | null>(null);
   const health = useServerHealth(server ? [server] : []);
 
   useEffect(() => {
     listServers().then(async (servers) => {
-      setServer(servers.find((s) => s.id === id) ?? null);
-      // Só pra garantir que o token existe antes das telas filhas
-      // precisarem dele (não usado diretamente aqui).
-      await getServerToken(id!);
+      const found = servers.find((s) => s.id === id) ?? null;
+      setServer(found);
+      if (found) setToken(await getServerToken(found.id));
     });
   }, [id]);
+
+  useEffect(() => {
+    if (!server || !token) return;
+    getMemoryConfig(server, token)
+      .then((config) => setMemoryEnabled(config.enabled !== false))
+      .catch(() => {});
+  }, [server, token]);
+
+  async function handleToggleMemory(value: boolean) {
+    if (!server || !token) return;
+    setMemoryEnabled(value);
+    try {
+      await setMemoryConfig(server, token, { enabled: value });
+    } catch {
+      setMemoryEnabled(!value);
+    }
+  }
 
   if (server === undefined) {
     return <View style={styles.container} />;
@@ -87,6 +105,19 @@ export default function ServerHubScreen() {
           </Pressable>
         </Link>
       </View>
+
+      {memoryEnabled !== null && (
+        <View style={styles.memoryRow}>
+          <View style={styles.memoryTexts}>
+            <Text style={styles.memoryTitle}>Memória (global)</Text>
+            <Text style={styles.subtitle}>
+              O agente guarda observações entre conversas neste servidor. Cada projeto também tem a
+              própria memória (gerenciável na tela de sessões dele).
+            </Text>
+          </View>
+          <Switch value={memoryEnabled} onValueChange={handleToggleMemory} trackColor={{ true: theme.accent }} />
+        </View>
+      )}
 
       <Button
         title="Remover servidor"
@@ -143,6 +174,25 @@ function createStyles(theme: Theme) {
     cardSubtitle: {
       color: theme.textDim,
       marginTop: 4,
+    },
+    memoryRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 12,
+      padding: 14,
+      borderRadius: 14,
+      backgroundColor: theme.surface,
+      borderWidth: 1,
+      borderColor: theme.border,
+    },
+    memoryTexts: {
+      flex: 1,
+      gap: 4,
+    },
+    memoryTitle: {
+      fontSize: 15,
+      fontWeight: '600',
+      color: theme.text,
     },
   });
 }
