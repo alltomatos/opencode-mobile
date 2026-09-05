@@ -116,6 +116,17 @@ export default function SessionChatScreen() {
   const [sessionTitle, setSessionTitle] = useState<string | null>(null);
   const [draft, setDraft] = useState('');
   const [sending, setSending] = useState(false);
+  // Fila de mensagens digitadas enquanto uma anterior ainda está em
+  // andamento — igual ao "followup: queue" do desktop (ver
+  // packages/app/src/pages/session.tsx + session-followup-queue.ts):
+  // é 100% client-side, o servidor rejeita um segundo prompt na mesma
+  // sessão enquanto ela está busy (Session.BusyError), então quem
+  // segura a fila e dispara uma a uma é o app. Usa ref (não só state)
+  // porque o loop de drenagem roda dentro de uma função async e
+  // precisa ler o valor mais recente sem depender de closures presas
+  // ao render em que a função foi criada.
+  const queueRef = useRef<string[]>([]);
+  const [queueCount, setQueueCount] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [permissionQueue, setPermissionQueue] = useState<PermissionRequest[]>([]);
   const [questionQueue, setQuestionQueue] = useState<QuestionRequest[]>([]);
@@ -318,10 +329,23 @@ export default function SessionChatScreen() {
       ? commands.filter((c) => c.name.toLowerCase().startsWith(draft.slice(1).toLowerCase()))
       : [];
 
-  async function runSelectedCommand(name: string, args: string) {
-    if (!server || !token || sending) return;
-    setSending(true);
-    setDraft('');
+  function enqueue(text: string) {
+    queueRef.current = [...queueRef.current, text];
+    setQueueCount(queueRef.current.length);
+  }
+
+  function dequeue(): string | undefined {
+    const [next, ...rest] = queueRef.current;
+    queueRef.current = rest;
+    setQueueCount(rest.length);
+    return next;
+  }
+
+  // Só a chamada de rede — sem tocar em `sending`/draft/fila, isso é
+  // responsabilidade de quem chama (drainQueue), pra poder encadear
+  // vários envios em sequência sem os efeitos colaterais duplicarem.
+  async function dispatchCommand(name: string, args: string) {
+    if (!server || !token) return;
     setError(null);
     try {
       await runCommand(server, token, sessionId, name, args);
@@ -329,28 +353,11 @@ export default function SessionChatScreen() {
       setMessages(fresh);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Falha ao rodar comando.');
-    } finally {
-      setSending(false);
     }
   }
 
-  async function handleSend() {
-    const text = draft.trim();
-    if (!text || !server || !token || sending) return;
-
-    // "/nome args" roda via POST /session/:id/command, não como texto
-    // — /model digitado como mensagem normal só faz o assistente
-    // *explicar* o comando (confirmado ao testar), não executá-lo.
-    if (text.startsWith('/')) {
-      const [name, ...rest] = text.slice(1).split(' ');
-      if (commands.some((c) => c.name === name)) {
-        await runSelectedCommand(name, rest.join(' '));
-        return;
-      }
-    }
-
-    setSending(true);
-    setDraft('');
+  async function dispatchText(text: string) {
+    if (!server || !token) return;
     setError(null);
     // Eco otimista: mostra a mensagem do usuário na hora, sem esperar
     // o POST síncrono voltar. Se a rede cair no meio do caminho (visto
@@ -375,9 +382,49 @@ export default function SessionChatScreen() {
       setSessionTitle(session.title);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Falha ao enviar mensagem.');
-    } finally {
-      setSending(false);
     }
+  }
+
+  // "/nome args" roda via POST /session/:id/command, não como texto —
+  // /model digitado como mensagem normal só faz o assistente
+  // *explicar* o comando (confirmado ao testar), não executá-lo.
+  async function dispatchOne(text: string) {
+    if (text.startsWith('/')) {
+      const [name, ...rest] = text.slice(1).split(' ');
+      if (commands.some((c) => c.name === name)) {
+        await dispatchCommand(name, rest.join(' '));
+        return;
+      }
+    }
+    await dispatchText(text);
+  }
+
+  // O servidor rejeita um segundo prompt na mesma sessão enquanto ela
+  // está busy — só dá pra ter UM envio de verdade em voo por vez. Em
+  // vez de travar o composer nesse meio tempo (o que forçava o
+  // usuário a sair e voltar da tela pra "destravar", como reportado),
+  // essa função vira um loop que drena a fila uma mensagem por vez,
+  // igual ao Claude Code: pode digitar e mandar quantas quiser
+  // enquanto a anterior ainda está rodando.
+  async function drainQueue(first: string) {
+    setSending(true);
+    let text: string | undefined = first;
+    while (text !== undefined) {
+      await dispatchOne(text);
+      text = dequeue();
+    }
+    setSending(false);
+  }
+
+  async function handleSend() {
+    const text = draft.trim();
+    if (!text || !server || !token) return;
+    setDraft('');
+    if (sending) {
+      enqueue(text);
+      return;
+    }
+    await drainQueue(text);
   }
 
   async function handlePermissionReply(req: PermissionRequest, reply: 'once' | 'always' | 'reject') {
@@ -594,6 +641,12 @@ export default function SessionChatScreen() {
         </ScrollView>
       )}
 
+      {queueCount > 0 && (
+        <Text style={styles.queueHint}>
+          {queueCount === 1 ? '1 mensagem na fila…' : `${queueCount} mensagens na fila…`}
+        </Text>
+      )}
+
       <View style={styles.composer}>
         <TextInput
           style={styles.input}
@@ -603,12 +656,19 @@ export default function SessionChatScreen() {
           onChangeText={setDraft}
           multiline
         />
+        {/* Não desativa enquanto `sending` — o servidor só aceita um
+            prompt em voo por sessão, mas o app enfileira o resto e
+            dispara em sequência (drainQueue), então dá pra continuar
+            mandando mensagem com a anterior ainda rodando, igual ao
+            Claude Code. Antes disso o botão ficava travado até a
+            resposta voltar, e só "destravava" se o usuário saísse e
+            voltasse da tela — reportado como bug. */}
         <TouchableOpacity
-          style={[styles.sendButton, (!draft.trim() || sending) && styles.sendButtonDisabled]}
+          style={[styles.sendButton, !draft.trim() && styles.sendButtonDisabled]}
           onPress={handleSend}
-          disabled={!draft.trim() || sending}
+          disabled={!draft.trim()}
         >
-          <Text style={styles.sendButtonText}>{sending ? '…' : 'Enviar'}</Text>
+          <Text style={styles.sendButtonText}>{sending ? 'Enfileirar' : 'Enviar'}</Text>
         </TouchableOpacity>
       </View>
 
@@ -722,6 +782,12 @@ function createStyles(theme: Theme) {
     retryWrap: {
       marginHorizontal: 12,
       marginBottom: 8,
+    },
+    queueHint: {
+      textAlign: 'center',
+      fontSize: 11,
+      color: theme.textFaint,
+      paddingBottom: 4,
     },
     bubble: {
       maxWidth: '100%',
