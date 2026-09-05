@@ -60,6 +60,27 @@ const MODE_LABEL: Record<Mode, string> = { manual: 'Manual', plan: 'Planejar', a
 import { getServerToken, listServers, ServerConnection } from '../../../../../../src/lib/servers';
 import { Theme, useTheme } from '../../../../../../src/lib/theme';
 
+// Retentativa curta pra chamadas feitas uma vez só ao montar a tela.
+// Sem isso, voltar do background reproduz o erro visto ao vivo
+// ("fetch failed: SocketException: connection abort") — o app volta
+// de minimizado antes do túnel Tailscale/rede terminar de reconectar,
+// então o PRIMEIRO fetch falha por pura questão de tempo, mesmo a
+// rede voltando normal um instante depois (sair e voltar da tela
+// funciona só porque dá esse tempo de sobra). A SSE já reconecta
+// sozinha; isso cobre o fetch inicial que não tinha esse cuidado.
+async function withRetry<T>(fn: () => Promise<T>, attempts = 3, delayMs = 1000): Promise<T> {
+  let lastError: unknown;
+  for (let i = 0; i < attempts; i++) {
+    try {
+      return await fn();
+    } catch (e) {
+      lastError = e;
+      if (i < attempts - 1) await new Promise((resolve) => setTimeout(resolve, delayMs));
+    }
+  }
+  throw lastError;
+}
+
 function textOf(message: MessageWithParts): string {
   return message.parts
     .filter((p): p is MessageWithParts['parts'][number] & { type: 'text'; text: string } => p.type === 'text')
@@ -133,7 +154,7 @@ export default function SessionChatScreen() {
     if (!server || !token || !sessionId) return;
 
     let cancelled = false;
-    listMessages(server, token, sessionId)
+    withRetry(() => listMessages(server, token, sessionId))
       .then((data) => !cancelled && setMessages(data))
       .catch((e) => !cancelled && setError(e instanceof Error ? e.message : 'Falha ao carregar mensagens.'));
     getSession(server, token, sessionId)
