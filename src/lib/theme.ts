@@ -1,5 +1,7 @@
 import { useColorScheme } from 'react-native';
 
+import { useSettings } from './settings';
+
 // Segue o tema do sistema em tempo real (useColorScheme já reage a
 // troca ao vivo, sem precisar reiniciar o app). Nada de hex hardcoded
 // nas telas — sempre consumir daqui.
@@ -53,5 +55,7 @@ export type Theme = typeof light;
 
 export function useTheme(): Theme {
   const scheme = useColorScheme();
-  return scheme === 'dark' ? dark : light;
+  const { settings } = useSettings();
+  const resolved = settings.themeOverride === 'system' ? scheme : settings.themeOverride;
+  return resolved === 'dark' ? dark : light;
 }

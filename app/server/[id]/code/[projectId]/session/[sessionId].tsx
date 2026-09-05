@@ -29,6 +29,7 @@ import {
   PermissionRequest,
   ProviderList,
   QuestionRequest,
+  ReasoningPart,
   replyPermission,
   replyQuestion,
   runCommand,
@@ -39,7 +40,14 @@ import {
   subscribeEvents,
   ToolPart,
 } from '../../../../../../src/lib/api';
-import { isHiddenPart, RetryCard, ThinkingRow, ToolCard } from '../../../../../../src/components/ActivityParts';
+import {
+  isHiddenPart,
+  ReasoningCard,
+  RetryCard,
+  ThinkingRow,
+  ToolCard,
+} from '../../../../../../src/components/ActivityParts';
+import { useSettings } from '../../../../../../src/lib/settings';
 
 // Ver docs/prd/mobile-app.md §6.1, item 3 — "modo" no app de referência
 // é dois mecanismos combinados: agente (build/plan) + nível de
@@ -69,6 +77,7 @@ export default function SessionChatScreen() {
   const listRef = useRef<FlatList>(null);
   const theme = useTheme();
   const styles = createStyles(theme);
+  const { settings } = useSettings();
 
   const [server, setServer] = useState<ServerConnection | null | undefined>(undefined);
   const [token, setToken] = useState<string | null>(null);
@@ -436,17 +445,22 @@ export default function SessionChatScreen() {
         ListEmptyComponent={<Text style={styles.placeholder}>Sem mensagens ainda — comece a conversa.</Text>}
         renderItem={({ item }) => {
           const text = textOf(item);
-          const toolParts = item.parts.filter(
-            (p: Part): p is ToolPart => !isHiddenPart(p) && p.type === 'tool'
+          const activityParts = item.parts.filter(
+            (p: Part): p is ToolPart | ReasoningPart =>
+              !isHiddenPart(p, settings.showReasoningSummaries) && (p.type === 'tool' || p.type === 'reasoning')
           );
-          if (!text && toolParts.length === 0) return null;
+          if (!text && activityParts.length === 0) return null;
           const isUser = item.info.role === 'user';
           return (
             <View style={[styles.bubbleRow, isUser ? styles.bubbleRowUser : undefined]}>
               <View style={styles.bubbleColumn}>
-                {toolParts.map((p: ToolPart) => (
-                  <ToolCard key={p.id} part={p} theme={theme} />
-                ))}
+                {activityParts.map((p: ToolPart | ReasoningPart) =>
+                  p.type === 'reasoning' ? (
+                    <ReasoningCard key={p.id} part={p} theme={theme} />
+                  ) : (
+                    <ToolCard key={p.id} part={p} theme={theme} defaultExpanded={settings.toolPartsExpanded} />
+                  )
+                )}
                 {!!text && (
                   <View style={[styles.bubble, isUser ? styles.bubbleUser : styles.bubbleAssistant]}>
                     <Text style={isUser ? styles.bubbleTextUser : styles.bubbleTextAssistant}>{text}</Text>

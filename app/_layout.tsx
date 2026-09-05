@@ -3,9 +3,14 @@ import { StatusBar } from 'expo-status-bar';
 import { useColorScheme } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
+import { SettingsContext, useSettingsState } from '../src/lib/settings';
 import { useTheme } from '../src/lib/theme';
 
-export default function RootLayout() {
+// A barra de abas (Servidores/Configurações) só existe no nível raiz —
+// assim que o usuário entra num servidor específico, a navegação vira
+// uma pilha cheia (sem tab bar), padrão comum em apps mobile pra dar
+// mais espaço de tela ao conteúdo de trabalho (chat, sessões, etc.).
+function RootNavigator() {
   const theme = useTheme();
   const scheme = useColorScheme();
 
@@ -21,7 +26,7 @@ export default function RootLayout() {
           contentStyle: { backgroundColor: theme.bg },
         }}
       >
-        <Stack.Screen name="index" options={{ title: 'Servidores' }} />
+        <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
         <Stack.Screen name="pair" options={{ title: 'Parear servidor', presentation: 'modal' }} />
         <Stack.Screen name="server/[id]/index" options={{ title: 'Servidor' }} />
         <Stack.Screen name="server/[id]/code/index" options={{ title: 'Projetos' }} />
@@ -31,5 +36,14 @@ export default function RootLayout() {
         <Stack.Screen name="server/[id]/batuta/index" options={{ title: 'Batuta' }} />
       </Stack>
     </SafeAreaProvider>
+  );
+}
+
+export default function RootLayout() {
+  const state = useSettingsState();
+  return (
+    <SettingsContext.Provider value={state}>
+      <RootNavigator />
+    </SettingsContext.Provider>
   );
 }

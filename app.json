@@ -32,7 +32,8 @@
           "cameraPermission": "Usado para escanear o QR code de pareamento com o servidor.",
           "recordAudioAndroid": false
         }
-      ]
+      ],
+      "expo-font"
     ]
   }
 }

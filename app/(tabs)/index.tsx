@@ -3,8 +3,8 @@ import { useCallback, useState } from 'react';
 import { FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { listServers, ServerConnection } from '../src/lib/servers';
-import { Theme, useTheme } from '../src/lib/theme';
+import { listServers, ServerConnection } from '../../src/lib/servers';
+import { Theme, useTheme } from '../../src/lib/theme';
 
 export default function ServerListScreen() {
   const [servers, setServers] = useState<ServerConnection[] | null>(null);
