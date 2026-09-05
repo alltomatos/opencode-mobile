@@ -36,11 +36,21 @@ export type Message = {
   };
 };
 
+// `synthetic: true` marca texto injetado pelo servidor ao expandir um
+// comando/skill (packages/opencode/src/session/prompt.ts,
+// SessionPrompt.command) — não o que o usuário realmente digitou.
+// Confirmado ao vivo: rodar POST /session/:id/command sem argumentos
+// gera uma mensagem de usuário cuja ÚNICA parte de texto é o corpo
+// inteiro da skill, já com `synthetic: true`. O desktop
+// (session-ui/message-part.tsx, UserMessageDisplay) usa esse campo
+// pra nunca mostrar esse texto como se fosse a mensagem do usuário —
+// é exatamente esse comportamento que replicamos no textOf() do chat.
 export type TextPart = {
   id: string;
   messageID: string;
   type: 'text';
   text: string;
+  synthetic?: boolean;
 };
 
 // Conferido contra packages/sdk/js/src/v2/gen/types.gen.ts no fork.

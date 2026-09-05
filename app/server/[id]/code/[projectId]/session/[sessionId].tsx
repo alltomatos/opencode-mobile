@@ -81,9 +81,19 @@ async function withRetry<T>(fn: () => Promise<T>, attempts = 3, delayMs = 1000):
   throw lastError;
 }
 
+// Ignora partes `synthetic` — é o corpo expandido de um comando/skill
+// injetado pelo servidor, não o que o usuário digitou (ver comentário
+// em TextPart, src/lib/api.ts). Igual ao desktop: quando não sobra
+// nenhum texto visível (comando rodado sem argumento extra), a
+// mensagem simplesmente não aparece na tela — o renderItem do
+// FlatList já retorna null nesse caso, então essa função só precisa
+// devolver string vazia.
 function textOf(message: MessageWithParts): string {
   return message.parts
-    .filter((p): p is MessageWithParts['parts'][number] & { type: 'text'; text: string } => p.type === 'text')
+    .filter(
+      (p): p is MessageWithParts['parts'][number] & { type: 'text'; text: string; synthetic?: boolean } =>
+        p.type === 'text' && !(p as { synthetic?: boolean }).synthetic
+    )
     .map((p) => p.text)
     .join('');
 }
