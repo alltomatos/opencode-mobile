@@ -56,12 +56,18 @@ function useShimmer(active: boolean) {
   return value;
 }
 
+// Anima a opacidade de um View em volta (não do próprio Text) —
+// animar Animated.Text direto com numberOfLines mostrou o texto
+// invisível em teste real (Android/Hermes), então evita a composição
+// arriscada e usa um <Text> normal dentro de um Animated.View.
 function ShimmerLabel({ text, active, style }: { text: string; active: boolean; style: object }) {
   const opacity = useShimmer(active);
   return (
-    <Animated.Text style={[style, active ? { opacity } : undefined]} numberOfLines={1}>
-      {text}
-    </Animated.Text>
+    <Animated.View style={[{ flex: 1, minWidth: 0 }, active ? { opacity } : undefined]}>
+      <Text style={style} numberOfLines={1}>
+        {text || ' '}
+      </Text>
+    </Animated.View>
   );
 }
 
@@ -70,11 +76,11 @@ function ShimmerLabel({ text, active, style }: { text: string; active: boolean; 
 // `skill` nunca expande (hideDetails no desktop): só a linha shimmer.
 export function ToolCard({ part, theme }: { part: ToolPart; theme: Theme }) {
   const [open, setOpen] = useState(false);
-  const meta = TOOL_META[part.tool] ?? { icon: '🔧', label: part.tool };
+  const meta = TOOL_META[part.tool] ?? { icon: '🔧', label: part.tool || 'Ferramenta' };
   const isPending = part.state.status === 'pending' || part.state.status === 'running';
   const isError = part.state.status === 'error';
   const hideDetails = part.tool === 'skill';
-  const title = part.state.title || meta.label;
+  const title = (part.state as { title?: string }).title || meta.label;
   const styles = createCardStyles(theme, isError);
 
   const body = isError ? part.state.error : part.state.output;

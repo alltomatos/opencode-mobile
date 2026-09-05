@@ -162,9 +162,16 @@ export default function SessionChatScreen() {
     // — dá a sensação de streaming mesmo sem usar prompt_async.
     const controller = new AbortController();
     (async () => {
-      try {
-        for await (const event of subscribeEvents(server, token, controller.signal)) {
-          if (cancelled) return;
+      // A conexão SSE cai sozinha de vez em quando em rede móvel/VPN
+      // (visto ao vivo: "fetch failed: SocketException: connection
+      // abort" bem no meio de uma resposta longa) — sem reconexão, os
+      // indicadores de tool/reasoning param de atualizar e só o
+      // listMessages() final no fim do handleSend mostra tudo de uma
+      // vez. Continua tentando reconectar até a tela ser desmontada.
+      while (!cancelled) {
+        try {
+          for await (const event of subscribeEvents(server, token, controller.signal)) {
+            if (cancelled) return;
           if (event.type === 'session.created' || event.type === 'session.updated') {
             const { sessionID, info } = (event as { properties: { sessionID: string; info: Session } })
               .properties;
@@ -219,7 +226,19 @@ export default function SessionChatScreen() {
             setMessages((prev) => {
               const list = prev ?? [];
               const idx = list.findIndex((m) => m.info.id === part.messageID);
-              if (idx === -1) return list;
+              if (idx === -1) {
+                // A parte de tool/reasoning às vezes chega antes do
+                // message.updated que cria a mensagem (visto ao vivo)
+                // — cria um placeholder aqui em vez de descartar, senão
+                // o card de atividade nunca aparece em tempo real.
+                return [
+                  ...list,
+                  {
+                    info: { id: part.messageID, sessionID: sessionId, role: 'assistant', time: { created: Date.now() } },
+                    parts: [part],
+                  },
+                ];
+              }
               const parts = list[idx].parts.filter((p) => p.id !== part.id);
               parts.push(part);
               const next = [...list];
@@ -227,9 +246,14 @@ export default function SessionChatScreen() {
               return next;
             });
           }
+          }
+        } catch {
+          // Conexão caiu — espera um pouco e tenta de novo (a menos
+          // que a tela já tenha sido desmontada).
         }
-      } catch {
-        // Conexão instável — a UI continua com o último estado conhecido.
+        if (!cancelled) {
+          await new Promise((resolve) => setTimeout(resolve, 1500));
+        }
       }
     })();
 
