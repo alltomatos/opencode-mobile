@@ -21,6 +21,9 @@ const light = {
   warnText: '#92400e',
   bubbleAssistant: '#f3f4f6',
   placeholder: '#9ca3af',
+  toolBg: '#f7f7f8',
+  toolBorder: '#e5e7eb',
+  toolShimmer: '#c7cad1',
 };
 
 const dark = {
@@ -41,6 +44,9 @@ const dark = {
   warnText: '#fbbf24',
   bubbleAssistant: '#1f262e',
   placeholder: '#6b7684',
+  toolBg: '#161c23',
+  toolBorder: '#262e37',
+  toolShimmer: '#3a4451',
 };
 
 export type Theme = typeof light;

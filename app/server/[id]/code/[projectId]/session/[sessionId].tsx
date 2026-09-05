@@ -29,14 +29,18 @@ import {
   PermissionRequest,
   ProviderList,
   QuestionRequest,
+  ReasoningPart,
   replyPermission,
   replyQuestion,
   runCommand,
   SelectedModel,
   sendPrompt,
   Session,
+  SessionStatus,
   subscribeEvents,
+  ToolPart,
 } from '../../../../../../src/lib/api';
+import { isHiddenPart, ReasoningCard, RetryCard, ToolCard } from '../../../../../../src/components/ActivityParts';
 
 // Ver docs/prd/mobile-app.md §6.1, item 3 — "modo" no app de referência
 // é dois mecanismos combinados: agente (build/plan) + nível de
@@ -81,6 +85,7 @@ export default function SessionChatScreen() {
   const modeRef = useRef<Mode>('manual');
   modeRef.current = mode;
   const [children, setChildren] = useState<Session[]>([]);
+  const [sessionStatus, setSessionStatus] = useState<SessionStatus | null>(null);
   const [keyboardHeight, setKeyboardHeight] = useState(0);
   const keyboardVisible = keyboardHeight > 0;
 
@@ -203,6 +208,11 @@ export default function SessionChatScreen() {
           } else if (event.type === 'question.replied' || event.type === 'question.rejected') {
             const { requestID } = (event as { properties: { requestID: string } }).properties;
             setQuestionQueue((prev) => prev.filter((q) => q.id !== requestID));
+          } else if (event.type === 'session.status') {
+            const { sessionID, status } = (event as { properties: { sessionID: string; status: SessionStatus } })
+              .properties;
+            if (sessionID !== sessionId) continue;
+            setSessionStatus(status.type === 'idle' ? null : status);
           } else if (event.type === 'message.part.updated') {
             const { sessionID, part } = (event as { properties: { sessionID: string; part: Part } }).properties;
             if (sessionID !== sessionId) continue;
@@ -384,17 +394,37 @@ export default function SessionChatScreen() {
         ListEmptyComponent={<Text style={styles.placeholder}>Sem mensagens ainda — comece a conversa.</Text>}
         renderItem={({ item }) => {
           const text = textOf(item);
-          if (!text) return null;
+          const activityParts = item.parts.filter(
+            (p: Part) => !isHiddenPart(p) && (p.type === 'tool' || p.type === 'reasoning')
+          );
+          if (!text && activityParts.length === 0) return null;
           const isUser = item.info.role === 'user';
           return (
             <View style={[styles.bubbleRow, isUser ? styles.bubbleRowUser : undefined]}>
-              <View style={[styles.bubble, isUser ? styles.bubbleUser : styles.bubbleAssistant]}>
-                <Text style={isUser ? styles.bubbleTextUser : styles.bubbleTextAssistant}>{text}</Text>
+              <View style={styles.bubbleColumn}>
+                {activityParts.map((p: Part) =>
+                  p.type === 'reasoning' ? (
+                    <ReasoningCard key={p.id} part={p as ReasoningPart} theme={theme} />
+                  ) : (
+                    <ToolCard key={p.id} part={p as ToolPart} theme={theme} />
+                  )
+                )}
+                {!!text && (
+                  <View style={[styles.bubble, isUser ? styles.bubbleUser : styles.bubbleAssistant]}>
+                    <Text style={isUser ? styles.bubbleTextUser : styles.bubbleTextAssistant}>{text}</Text>
+                  </View>
+                )}
               </View>
             </View>
           );
         }}
       />
+
+      {sessionStatus?.type === 'retry' && (
+        <View style={styles.retryWrap}>
+          <RetryCard theme={theme} attempt={sessionStatus.attempt} message={sessionStatus.message} />
+        </View>
+      )}
 
       {error && <Text style={styles.error}>{error}</Text>}
 
@@ -593,8 +623,16 @@ function createStyles(theme: Theme) {
     bubbleRowUser: {
       justifyContent: 'flex-end',
     },
-    bubble: {
+    bubbleColumn: {
       maxWidth: '85%',
+      gap: 0,
+    },
+    retryWrap: {
+      marginHorizontal: 12,
+      marginBottom: 8,
+    },
+    bubble: {
+      maxWidth: '100%',
       borderRadius: 14,
       paddingHorizontal: 14,
       paddingVertical: 10,

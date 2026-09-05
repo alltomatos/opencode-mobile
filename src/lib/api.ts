@@ -36,9 +36,6 @@ export type Message = {
   };
 };
 
-// TextPart é o único tipo de parte que o app renderiza por enquanto;
-// os outros (tool, reasoning, file, etc.) passam pelo formato genérico
-// abaixo pra não quebrar ao receber algo que ainda não sabe desenhar.
 export type TextPart = {
   id: string;
   messageID: string;
@@ -46,7 +43,51 @@ export type TextPart = {
   text: string;
 };
 
-export type Part = TextPart | { id: string; messageID: string; type: string };
+// Conferido contra packages/sdk/js/src/v2/gen/types.gen.ts no fork.
+export type ReasoningPart = {
+  id: string;
+  messageID: string;
+  type: 'reasoning';
+  text: string;
+  time: { start: number; end?: number };
+};
+
+// tool = id real da ferramenta no servidor — conferido lendo
+// packages/opencode/src/tool/*.ts (cada arquivo chama Tool.define com
+// esse literal): shell.ts usa "bash" (não "shell"!), apply_patch.ts
+// usa "apply_patch", todo.ts usa "todowrite", memory-search/save.ts
+// usam "memory_search"/"memory_save", websearch.ts usa "websearch".
+// Os demais (read, write, edit, glob, grep, task, webfetch, skill,
+// question, lsp, plan_exit, browser, computer) usam o próprio nome do
+// arquivo/conceito como id.
+export type ToolPart = {
+  id: string;
+  messageID: string;
+  type: 'tool';
+  tool: string;
+  callID: string;
+  state: {
+    status: 'pending' | 'running' | 'completed' | 'error';
+    input?: unknown;
+    title?: string;
+    output?: string;
+    error?: string;
+    time?: { start: number; end?: number };
+  };
+};
+
+export type StepPart = {
+  id: string;
+  messageID: string;
+  type: 'step-start' | 'step-finish';
+};
+
+export type Part =
+  | TextPart
+  | ReasoningPart
+  | ToolPart
+  | StepPart
+  | { id: string; messageID: string; type: string };
 
 export type MessageWithParts = {
   info: Message;
@@ -149,10 +190,21 @@ export type Command = {
   source?: 'command' | 'mcp' | 'skill';
 };
 
+// Conferido contra packages/schema/src/session-status-event.ts. "busy"
+// e "idle" o app não precisa mostrar (o indicador de tool/reasoning já
+// cobre "trabalhando"); "retry" é o único que precisa de UI própria —
+// um card inline (não um badge de header) com a mensagem de erro e a
+// tentativa atual, igual ao desktop (session-retry.tsx).
+export type SessionStatus =
+  | { type: 'idle' }
+  | { type: 'busy' }
+  | { type: 'retry'; attempt: number; message: string; next: number };
+
 export type SessionEvent =
   | { type: 'session.created'; properties: { sessionID: string; info: Session } }
   | { type: 'session.updated'; properties: { sessionID: string; info: Session } }
   | { type: 'session.deleted'; properties: { sessionID: string; info: Session } }
+  | { type: 'session.status'; properties: { sessionID: string; status: SessionStatus } }
   | { type: 'message.updated'; properties: { sessionID: string; info: Message } }
   | { type: 'message.part.updated'; properties: { sessionID: string; part: Part } }
   | { type: 'permission.asked'; properties: PermissionRequest }
