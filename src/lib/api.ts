@@ -304,8 +304,19 @@ export async function listProjectFolders(server: ServerConnection, token: string
   return entries.filter((e) => e.type === 'directory').map((e) => ({ name: e.name, path: e.absolute }));
 }
 
-export async function listSessions(server: ServerConnection, token: string): Promise<Session[]> {
-  const res = await fetch(authedUrl(server, token, '/session'));
+// `directory` não é opcional na prática: sem ele, o servidor resolve
+// `ctx.project` a partir do próprio diretório padrão da instância (visto
+// ao vivo — GET /session sem query devolvia só sessões de
+// /home/opencode/app, nunca as de outros projetos) e a lista some por
+// completo pro projeto que o usuário está olhando. Conferido em
+// packages/opencode/src/server/routes/instance/httpapi/handlers/session.ts
+// (list) + packages/opencode/src/session/session.ts (list faz
+// listByProject com ctx.project.id, escopado pelo directory resolvido).
+export async function listSessions(server: ServerConnection, token: string, directory: string): Promise<Session[]> {
+  const url = new URL('/session', server.url);
+  url.searchParams.set('auth_token', token);
+  url.searchParams.set('directory', directory);
+  const res = await fetch(url.toString());
   if (!res.ok) {
     throw new Error(`GET /session falhou: ${res.status}`);
   }

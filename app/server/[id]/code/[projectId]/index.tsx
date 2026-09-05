@@ -46,7 +46,7 @@ export default function ProjectSessionsScreen() {
     if (!server || !token) return;
 
     let cancelled = false;
-    listSessions(server, token)
+    listSessions(server, token, directory)
       .then((data) => !cancelled && setSessions(data.filter((s) => s.directory === directory && !s.parentID)))
       .catch((e) => !cancelled && setError(e instanceof Error ? e.message : 'Falha ao listar sessões.'));
 
