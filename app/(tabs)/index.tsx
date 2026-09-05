@@ -4,7 +4,7 @@ import { FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { StatusDot } from '../../src/components/StatusDot';
-import { listServers, ServerConnection } from '../../src/lib/servers';
+import { describeConnection, listServers, ServerConnection } from '../../src/lib/servers';
 import { useServerHealth } from '../../src/lib/serverHealth';
 import { Theme, useTheme } from '../../src/lib/theme';
 
@@ -50,6 +50,7 @@ export default function ServerListScreen() {
               <View style={styles.rowHeader}>
                 <StatusDot health={health[item.id]} theme={theme} />
                 <Text style={styles.rowLabel}>{item.label}</Text>
+                <Text style={styles.rowConnectionType}>{describeConnection(item.url)}</Text>
               </View>
               <Text style={styles.rowUrl}>{item.url}</Text>
             </Pressable>
@@ -106,6 +107,16 @@ function createStyles(theme: Theme) {
       fontSize: 16,
       fontWeight: '600',
       color: theme.text,
+    },
+    rowConnectionType: {
+      fontSize: 11,
+      fontWeight: '700',
+      color: theme.textFaint,
+      textTransform: 'uppercase',
+      backgroundColor: theme.bgAlt,
+      borderRadius: 6,
+      paddingHorizontal: 6,
+      paddingVertical: 2,
     },
     rowUrl: {
       color: theme.textDim,

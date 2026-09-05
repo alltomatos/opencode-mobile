@@ -77,6 +77,35 @@ export async function addServer(payload: PairingPayload): Promise<ServerConnecti
   return server;
 }
 
+// Não existe um campo "tipo de conexão" no protocolo — o desktop
+// (packages/app/src/context/server.tsx) também não deriva isso
+// automaticamente, é só texto livre que a pessoa digita no label.
+// Aqui detectamos pelo próprio host da URL, já que é informação
+// grátis e ajuda a diferenciar "mesmo servidor, caminho diferente"
+// (ex.: a mesma VPS acessada via Tailscale ou via IP público) sem
+// depender do usuário lembrar de anotar isso no nome.
+export function describeConnection(url: string): string {
+  let host: string;
+  try {
+    host = new URL(url).hostname;
+  } catch {
+    return 'Desconhecida';
+  }
+
+  if (host === 'localhost' || host === '127.0.0.1' || host === '::1') return 'Local';
+  if (host.endsWith('.ts.net')) return 'Tailscale';
+
+  const ipv4 = host.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
+  if (ipv4) {
+    const [a, b] = ipv4.slice(1).map(Number);
+    // CGNAT 100.64.0.0/10 — faixa que o Tailscale usa pros IPs "100.x".
+    if (a === 100 && b >= 64 && b <= 127) return 'Tailscale';
+    if (a === 10 || (a === 172 && b >= 16 && b <= 31) || (a === 192 && b === 168)) return 'Rede local';
+  }
+
+  return 'Internet';
+}
+
 export async function removeServer(id: string): Promise<void> {
   const servers = await readManifest();
   await writeManifest(servers.filter((s) => s.id !== id));
