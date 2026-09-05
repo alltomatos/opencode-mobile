@@ -50,7 +50,6 @@ export default function ProjectListScreen() {
           <Link href={`/server/${id}/code/${encodeURIComponent(item.path)}`} asChild>
             <Pressable style={styles.row}>
               <Text style={styles.rowLabel}>{item.name}</Text>
-              <Text style={styles.rowPath}>{item.path}</Text>
             </Pressable>
           </Link>
         )}
@@ -92,11 +91,6 @@ function createStyles(theme: Theme) {
       fontSize: 16,
       fontWeight: '600',
       color: theme.text,
-    },
-    rowPath: {
-      color: theme.textDim,
-      marginTop: 2,
-      fontSize: 13,
     },
     addLink: {
       textAlign: 'center',
