@@ -2,7 +2,7 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { Button, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 
-import { createSession, openProject, runShell } from '../../../../src/lib/api';
+import { createSession, PROJECTS_ROOT, runShell } from '../../../../src/lib/api';
 import { getServerToken, listServers, ServerConnection } from '../../../../src/lib/servers';
 import { Theme, useTheme } from '../../../../src/lib/theme';
 
@@ -11,7 +11,6 @@ import { Theme, useTheme } from '../../../../src/lib/theme';
 // aqui é criar uma sessão "bootstrap" ancorada em /home/opencode (que
 // sempre existe, é o home do usuário do servidor) e rodar
 // mkdir/git clone via POST /session/:id/shell.
-const PROJECTS_ROOT = '/home/opencode/projects';
 const BOOTSTRAP_DIRECTORY = '/home/opencode';
 
 function slugFromGithubUrl(url: string): string | null {
@@ -59,11 +58,10 @@ export default function AddProjectScreen() {
       setStatus('Preparando…');
       const bootstrap = await createSession(server, token, BOOTSTRAP_DIRECTORY);
 
-      // Uma pasta sem git vira "global" no servidor — todo diretório
-      // sem VCS detectado compartilha um único worktree "/" (ver
-      // packages/opencode/src/project/project.ts) e some no meio de
-      // outros projetos. `git init` garante que a pasta nova vire seu
-      // próprio projeto, com worktree = o caminho real.
+      // `git init` na pasta nova é só um bônus (a maioria de projeto de
+      // código já nasce versionado) — a listagem do app não depende
+      // disso, ela lista pastas de verdade em PROJECTS_ROOT via
+      // GET /file, então uma pasta sem git aparece do mesmo jeito.
       const command =
         mode === 'github'
           ? `git clone "${githubUrl.trim()}" "${fullPath}"`
@@ -71,9 +69,7 @@ export default function AddProjectScreen() {
       setStatus(mode === 'github' ? 'Clonando repositório…' : 'Criando pasta…');
       await runShell(server, token, bootstrap.id, command);
 
-      setStatus('Abrindo projeto…');
-      const project = await openProject(server, token, fullPath);
-      router.replace(`/server/${id}/code/${project.id}`);
+      router.replace(`/server/${id}/code/${encodeURIComponent(fullPath)}`);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Falha ao criar projeto.');
     } finally {

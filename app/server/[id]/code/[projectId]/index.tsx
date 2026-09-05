@@ -3,19 +3,24 @@ import { useEffect, useState } from 'react';
 import { Button, FlatList, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { createSession, listProjects, listSessions, Project, Session, subscribeEvents } from '../../../../../src/lib/api';
+import { createSession, listSessions, Session, subscribeEvents } from '../../../../../src/lib/api';
 import { getServerToken, listServers, ServerConnection } from '../../../../../src/lib/servers';
 import { Theme, useTheme } from '../../../../../src/lib/theme';
 
 export default function ProjectSessionsScreen() {
   const { id, projectId } = useLocalSearchParams<{ id: string; projectId: string }>();
+  // `projectId` é o caminho absoluto da pasta, URL-encoded — não um id
+  // de projeto do servidor. Ver docs/prd/mobile-app.md §5.1: listamos
+  // pastas reais em vez de confiar na resolução de "projeto" do
+  // servidor (frágil e não cobre pastas sem git).
+  const directory = decodeURIComponent(projectId);
+  const projectName = directory.split('/').pop() || directory;
   const insets = useSafeAreaInsets();
   const theme = useTheme();
   const styles = createStyles(theme);
 
   const [server, setServer] = useState<ServerConnection | null | undefined>(undefined);
   const [token, setToken] = useState<string | null>(null);
-  const [project, setProject] = useState<Project | null | undefined>(undefined);
   const [sessions, setSessions] = useState<Session[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
@@ -31,17 +36,10 @@ export default function ProjectSessionsScreen() {
 
   useEffect(() => {
     if (!server || !token) return;
-    listProjects(server, token)
-      .then((all) => setProject(all.find((p) => p.id === projectId) ?? null))
-      .catch(() => setProject(null));
-  }, [server, token, projectId]);
-
-  useEffect(() => {
-    if (!server || !token || !project) return;
 
     let cancelled = false;
     listSessions(server, token)
-      .then((data) => !cancelled && setSessions(data.filter((s) => s.directory === project.worktree && !s.parentID)))
+      .then((data) => !cancelled && setSessions(data.filter((s) => s.directory === directory && !s.parentID)))
       .catch((e) => !cancelled && setError(e instanceof Error ? e.message : 'Falha ao listar sessões.'));
 
     const controller = new AbortController();
@@ -51,7 +49,7 @@ export default function ProjectSessionsScreen() {
           if (cancelled) return;
           if (event.type === 'session.created' || event.type === 'session.updated') {
             const info = (event as { properties: { info: Session } }).properties.info;
-            if (info.directory !== project.worktree || info.parentID) continue;
+            if (info.directory !== directory || info.parentID) continue;
             setSessions((prev) => {
               const rest = (prev ?? []).filter((s) => s.id !== info.id);
               return [info, ...rest];
@@ -70,14 +68,14 @@ export default function ProjectSessionsScreen() {
       cancelled = true;
       controller.abort();
     };
-  }, [server, token, project]);
+  }, [server, token, directory]);
 
   async function handleNewSession() {
-    if (!server || !token || !project || creating) return;
+    if (!server || !token || creating) return;
     setCreating(true);
     setError(null);
     try {
-      const session = await createSession(server, token, project.worktree);
+      const session = await createSession(server, token, directory);
       router.push(`/server/${id}/code/${projectId}/session/${session.id}`);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Falha ao criar sessão.');
@@ -86,23 +84,15 @@ export default function ProjectSessionsScreen() {
     }
   }
 
-  if (project === undefined || (project && sessions === null)) {
+  if (!server || sessions === null) {
     return <View style={styles.container} />;
-  }
-
-  if (project === null) {
-    return (
-      <View style={styles.container}>
-        <Text style={styles.subtitle}>Projeto não encontrado.</Text>
-      </View>
-    );
   }
 
   return (
     <View style={[styles.list, { paddingBottom: insets.bottom + 16 }]}>
       <View style={styles.header}>
-        <Text style={styles.title}>{project.name || project.worktree.split('/').pop()}</Text>
-        <Text style={styles.subtitle}>{project.worktree}</Text>
+        <Text style={styles.title}>{projectName}</Text>
+        <Text style={styles.subtitle}>{directory}</Text>
       </View>
 
       {error && <Text style={styles.error}>{error}</Text>}

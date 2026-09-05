@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react';
 import { FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { listProjects, Project } from '../../../../src/lib/api';
+import { listProjectFolders, ProjectFolder } from '../../../../src/lib/api';
 import { getServerToken, listServers, ServerConnection } from '../../../../src/lib/servers';
 import { Theme, useTheme } from '../../../../src/lib/theme';
 
@@ -15,7 +15,7 @@ export default function ProjectListScreen() {
 
   const [server, setServer] = useState<ServerConnection | null | undefined>(undefined);
   const [token, setToken] = useState<string | null>(null);
-  const [projects, setProjects] = useState<Project[] | null>(null);
+  const [projects, setProjects] = useState<ProjectFolder[] | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -28,7 +28,7 @@ export default function ProjectListScreen() {
 
   useEffect(() => {
     if (!server || !token) return;
-    listProjects(server, token)
+    listProjectFolders(server, token)
       .then(setProjects)
       .catch((e) => setError(e instanceof Error ? e.message : 'Falha ao listar projetos.'));
   }, [server, token]);
@@ -41,20 +41,16 @@ export default function ProjectListScreen() {
     <View style={[styles.list, { paddingBottom: insets.bottom + 16 }]}>
       {error && <Text style={styles.error}>{error}</Text>}
       <FlatList
-        // worktree "/" é o projeto "global" que o servidor usa como
-        // catch-all pra diretórios sem git detectado — não é um
-        // projeto de verdade, não faz sentido listar (ver
-        // packages/opencode/src/project/project.ts).
-        data={projects.filter((p) => p.worktree !== '/')}
-        keyExtractor={(item) => item.id}
+        data={projects}
+        keyExtractor={(item) => item.path}
         ListEmptyComponent={
           <Text style={styles.placeholder}>Nenhum projeto ainda — adicione um pra começar.</Text>
         }
         renderItem={({ item }) => (
-          <Link href={`/server/${id}/code/${item.id}`} asChild>
+          <Link href={`/server/${id}/code/${encodeURIComponent(item.path)}`} asChild>
             <Pressable style={styles.row}>
-              <Text style={styles.rowLabel}>{item.name || item.worktree.split('/').pop()}</Text>
-              <Text style={styles.rowPath}>{item.worktree}</Text>
+              <Text style={styles.rowLabel}>{item.name}</Text>
+              <Text style={styles.rowPath}>{item.path}</Text>
             </Pressable>
           </Link>
         )}
