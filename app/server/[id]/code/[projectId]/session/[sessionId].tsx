@@ -313,6 +313,19 @@ export default function SessionChatScreen() {
     setSending(true);
     setDraft('');
     setError(null);
+    // Eco otimista: mostra a mensagem do usuário na hora, sem esperar
+    // o POST síncrono voltar. Se a rede cair no meio do caminho (visto
+    // ao vivo: ConnectException/conexão instável), o texto digitado
+    // não desaparece da tela — só o listMessages() do sucesso substitui
+    // esse placeholder pelo dado real do servidor.
+    const optimisticID = `optimistic-${Date.now()}`;
+    setMessages((prev) => [
+      ...(prev ?? []),
+      {
+        info: { id: optimisticID, sessionID: sessionId, role: 'user', time: { created: Date.now() } },
+        parts: [{ id: `${optimisticID}-text`, messageID: optimisticID, type: 'text', text }],
+      },
+    ]);
     try {
       await sendPrompt(server, token, sessionId, text, MODE_AGENT[mode], model ?? undefined);
       const [fresh, session] = await Promise.all([
