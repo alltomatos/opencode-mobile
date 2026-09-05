@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Animated, Easing, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
-import { Part, ReasoningPart, ToolPart } from '../lib/api';
+import { Part, ToolPart } from '../lib/api';
 import { Theme } from '../lib/theme';
 
 // Ids reais conferidos em D:\dev\opencode\packages\opencode\src\tool\*.ts
@@ -31,8 +31,15 @@ const TOOL_META: Record<string, { icon: string; label: string }> = {
 
 // Partes que o desktop não mostra na timeline (session-ui/message-part.tsx
 // HIDDEN_TOOLS + step-start/step-finish são só marcadores de agrupamento).
+// `reasoning` também fica de fora por padrão — conferido em
+// packages/app/src/context/settings.tsx: showReasoningSummaries começa
+// como `false`, então o texto do "pensamento" nunca vira card
+// persistente lá; só existe o indicador genérico "Pensando…"/
+// "Executando…" (ver ThinkingRow abaixo), que some quando a sessão
+// termina de responder.
 export function isHiddenPart(part: Part): boolean {
   if (part.type === 'step-start' || part.type === 'step-finish') return true;
+  if (part.type === 'reasoning') return true;
   if (part.type === 'tool' && (part as ToolPart).tool === 'todowrite') return true;
   return false;
 }
@@ -107,31 +114,21 @@ export function ToolCard({ part, theme }: { part: ToolPart; theme: Theme }) {
   );
 }
 
-// "Thinking…" — colapsado por padrão, revela o texto streamado ao
-// tocar (message-part.tsx: BasicTool icon="brain" defaultOpen={false}).
-export function ReasoningCard({ part, theme }: { part: ReasoningPart; theme: Theme }) {
-  const [open, setOpen] = useState(false);
-  const isPending = !part.time?.end;
+// Linha genérica "Pensando…"/"Executando…" — conferido em
+// packages/app/src/pages/session/timeline/{rows.ts,timeline-static-rows.tsx}:
+// aparece enquanto a sessão está "busy", troca pro rótulo de execução
+// quando alguma tool está com status "running", e SOME por completo
+// assim que a sessão termina (não fica na tela junto com a resposta
+// final — só os cards de tool ficam, isso já é permanente por padrão).
+export function ThinkingRow({ theme, executing }: { theme: Theme; executing: boolean }) {
   const styles = createCardStyles(theme, false);
-
   return (
-    <TouchableOpacity
-      activeOpacity={part.text ? 0.7 : 1}
-      disabled={!part.text}
-      onPress={() => setOpen((o) => !o)}
-      style={styles.card}
-    >
+    <View style={styles.card}>
       <View style={styles.row}>
-        <Text style={styles.icon}>🧠</Text>
-        <ShimmerLabel text="Pensando…" active={isPending} style={styles.title} />
-        {!!part.text && <Text style={styles.caret}>{open ? '▾' : '▸'}</Text>}
+        <Text style={styles.icon}>🤔</Text>
+        <ShimmerLabel text={executing ? 'Executando…' : 'Pensando…'} active style={styles.title} />
       </View>
-      {open && !!part.text && (
-        <Text style={styles.body} numberOfLines={60}>
-          {part.text}
-        </Text>
-      )}
-    </TouchableOpacity>
+    </View>
   );
 }
 

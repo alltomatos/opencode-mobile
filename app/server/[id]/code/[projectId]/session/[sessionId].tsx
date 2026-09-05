@@ -29,7 +29,6 @@ import {
   PermissionRequest,
   ProviderList,
   QuestionRequest,
-  ReasoningPart,
   replyPermission,
   replyQuestion,
   runCommand,
@@ -40,7 +39,7 @@ import {
   subscribeEvents,
   ToolPart,
 } from '../../../../../../src/lib/api';
-import { isHiddenPart, ReasoningCard, RetryCard, ToolCard } from '../../../../../../src/components/ActivityParts';
+import { isHiddenPart, RetryCard, ThinkingRow, ToolCard } from '../../../../../../src/components/ActivityParts';
 
 // Ver docs/prd/mobile-app.md §6.1, item 3 — "modo" no app de referência
 // é dois mecanismos combinados: agente (build/plan) + nível de
@@ -372,6 +371,12 @@ export default function SessionChatScreen() {
 
   const pendingPermission = permissionQueue[0];
   const pendingQuestion = questionQueue[0];
+  // Rótulo do ThinkingRow: "Executando…" enquanto alguma tool está
+  // rodando de verdade, senão "Pensando…" — mesma regra de
+  // timeline-static-rows.tsx (hasRunningToolPart) do desktop.
+  const hasRunningTool = (messages ?? []).some((m) =>
+    m.parts.some((p) => p.type === 'tool' && (p as ToolPart).state.status === 'running')
+  );
   const headerTitle = sessionTitle || 'Sessão';
   const selectedModelInfo = model && providers?.all.find((p) => p.id === model.providerID)?.models[model.modelID];
   const modelLabel = selectedModelInfo?.name ?? 'Modelo padrão';
@@ -431,21 +436,17 @@ export default function SessionChatScreen() {
         ListEmptyComponent={<Text style={styles.placeholder}>Sem mensagens ainda — comece a conversa.</Text>}
         renderItem={({ item }) => {
           const text = textOf(item);
-          const activityParts = item.parts.filter(
-            (p: Part) => !isHiddenPart(p) && (p.type === 'tool' || p.type === 'reasoning')
+          const toolParts = item.parts.filter(
+            (p: Part): p is ToolPart => !isHiddenPart(p) && p.type === 'tool'
           );
-          if (!text && activityParts.length === 0) return null;
+          if (!text && toolParts.length === 0) return null;
           const isUser = item.info.role === 'user';
           return (
             <View style={[styles.bubbleRow, isUser ? styles.bubbleRowUser : undefined]}>
               <View style={styles.bubbleColumn}>
-                {activityParts.map((p: Part) =>
-                  p.type === 'reasoning' ? (
-                    <ReasoningCard key={p.id} part={p as ReasoningPart} theme={theme} />
-                  ) : (
-                    <ToolCard key={p.id} part={p as ToolPart} theme={theme} />
-                  )
-                )}
+                {toolParts.map((p: ToolPart) => (
+                  <ToolCard key={p.id} part={p} theme={theme} />
+                ))}
                 {!!text && (
                   <View style={[styles.bubble, isUser ? styles.bubbleUser : styles.bubbleAssistant]}>
                     <Text style={isUser ? styles.bubbleTextUser : styles.bubbleTextAssistant}>{text}</Text>
@@ -455,6 +456,15 @@ export default function SessionChatScreen() {
             </View>
           );
         }}
+        ListFooterComponent={
+          sending ? (
+            <View style={styles.bubbleRow}>
+              <View style={styles.bubbleColumn}>
+                <ThinkingRow theme={theme} executing={hasRunningTool} />
+              </View>
+            </View>
+          ) : null
+        }
       />
 
       {sessionStatus?.type === 'retry' && (
