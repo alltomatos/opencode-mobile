@@ -4,7 +4,7 @@ import { Button, Pressable, StyleSheet, Switch, Text, View } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { StatusDot } from '../../../src/components/StatusDot';
-import { getMemoryConfig, ServerHealth, setMemoryConfig } from '../../../src/lib/api';
+import { getMemoryConfig, listProjectFolders, ServerHealth, setMemoryConfig } from '../../../src/lib/api';
 import {
   describeConnection,
   getServerToken,
@@ -41,6 +41,7 @@ export default function ServerHubScreen() {
   const [server, setServer] = useState<ServerConnection | null | undefined>(undefined);
   const [token, setToken] = useState<string | null>(null);
   const [memoryEnabled, setMemoryEnabled] = useState<boolean | null>(null);
+  const [projectCount, setProjectCount] = useState<number | null>(null);
   const health = useServerHealth(server ? [server] : []);
 
   useEffect(() => {
@@ -50,6 +51,13 @@ export default function ServerHubScreen() {
       if (found) setToken(await getServerToken(found.id));
     });
   }, [id]);
+
+  useEffect(() => {
+    if (!server || !token) return;
+    listProjectFolders(server, token)
+      .then((folders) => setProjectCount(folders.length))
+      .catch(() => {});
+  }, [server, token]);
 
   useEffect(() => {
     if (!server || !token) return;
@@ -95,7 +103,12 @@ export default function ServerHubScreen() {
         <Link href={`/server/${id}/code`} asChild>
           <Pressable style={styles.card}>
             <Text style={styles.cardTitle}>Code</Text>
-            <Text style={styles.cardSubtitle}>Projetos e sessões</Text>
+            <Text style={styles.cardSubtitle}>
+              Projetos e sessões
+              {projectCount !== null
+                ? ` · ${projectCount} ${projectCount === 1 ? 'projeto' : 'projetos'}`
+                : ''}
+            </Text>
           </Pressable>
         </Link>
         <Link href={`/server/${id}/batuta`} asChild>
