@@ -3,11 +3,13 @@ import { useEffect, useState } from 'react';
 import { Platform, StyleSheet, Switch, Text, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { getMemoryConfig, setMemoryConfig } from '../../src/lib/api';
 import {
   getNotificationPermissionStatus,
   isNotificationSupportAvailable,
   requestNotificationPermission,
 } from '../../src/lib/notifications';
+import { getServerToken, listServers, ServerConnection } from '../../src/lib/servers';
 import { NotificationCategory, ThemeOverride, useSettings } from '../../src/lib/settings';
 import { Theme, useTheme } from '../../src/lib/theme';
 
@@ -30,11 +32,40 @@ export default function SettingsScreen() {
   const { settings, update } = useSettings();
   const [permissionStatus, setPermissionStatus] = useState<'granted' | 'denied' | 'undetermined' | null>(null);
   const notificationsSupported = isNotificationSupportAvailable();
+  const [servers, setServers] = useState<ServerConnection[]>([]);
+  // `null` = ainda carregando; ausente do mapa depois de carregar =
+  // servidor não respondeu GET /memory (fica de fora da lista, sem
+  // toggle quebrado mostrando estado errado).
+  const [serverMemory, setServerMemory] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
     if (!notificationsSupported) return;
     getNotificationPermissionStatus().then(setPermissionStatus);
   }, [notificationsSupported]);
+
+  useEffect(() => {
+    listServers().then(async (list) => {
+      setServers(list);
+      for (const server of list) {
+        const token = await getServerToken(server.id);
+        if (!token) continue;
+        getMemoryConfig(server, token)
+          .then((config) => setServerMemory((prev) => ({ ...prev, [server.id]: config.enabled !== false })))
+          .catch(() => {});
+      }
+    });
+  }, []);
+
+  async function handleToggleServerMemory(server: ServerConnection, value: boolean) {
+    const token = await getServerToken(server.id);
+    if (!token) return;
+    setServerMemory((prev) => ({ ...prev, [server.id]: value }));
+    try {
+      await setMemoryConfig(server, token, { enabled: value });
+    } catch {
+      setServerMemory((prev) => ({ ...prev, [server.id]: !value }));
+    }
+  }
 
   async function handleToggleCategory(key: NotificationCategory, value: boolean) {
     // Só pede a permissão do sistema na hora que a pessoa realmente
@@ -100,6 +131,37 @@ export default function SettingsScreen() {
           />
         </View>
       </View>
+
+      {servers.length > 0 && (
+        <>
+          <Text style={styles.sectionLabel}>Memória</Text>
+          <View style={styles.card}>
+            <Text style={styles.rowSubtitle}>
+              O agente guarda observações entre conversas — é uma configuração salva em cada servidor, não
+              no app. Cada projeto também tem a própria memória (gerenciável na tela de sessões dele).
+            </Text>
+            {servers.map((server) => (
+              <View key={server.id}>
+                <View style={styles.divider} />
+                <View style={styles.switchRow}>
+                  <Text style={[styles.rowTitle, styles.switchLabel]} numberOfLines={1}>
+                    {server.label}
+                  </Text>
+                  {serverMemory[server.id] === undefined ? (
+                    <Text style={styles.rowSubtitle}>—</Text>
+                  ) : (
+                    <Switch
+                      value={serverMemory[server.id]}
+                      onValueChange={(value) => handleToggleServerMemory(server, value)}
+                      trackColor={{ true: theme.accent, false: theme.border }}
+                    />
+                  )}
+                </View>
+              </View>
+            ))}
+          </View>
+        </>
+      )}
 
       <Text style={styles.sectionLabel}>Notificações</Text>
       <View style={styles.card}>
