@@ -67,14 +67,51 @@ function useShimmer(active: boolean) {
 // animar Animated.Text direto com numberOfLines mostrou o texto
 // invisível em teste real (Android/Hermes), então evita a composição
 // arriscada e usa um <Text> normal dentro de um Animated.View.
+//
+// `flexShrink: 1` sem `flex`/`flexGrow` — `flex: 1` vira flexGrow:1 +
+// flexBasis:0%, e dentro de um container que se ajusta ao próprio
+// conteúdo (o balão do card quando não tem mais nada ao lado, ex.: o
+// ThinkingRow sozinho no rodapé da lista) essa base zero nunca cresce
+// (não tem "espaço sobrando" a distribuir num pai sem largura fixa) —
+// resultado: o texto colapsa pra largura zero e some. Visto ao vivo:
+// o ícone aparecia, a palavra do lado não.
 function ShimmerLabel({ text, active, style }: { text: string; active: boolean; style: object }) {
   const opacity = useShimmer(active);
   return (
-    <Animated.View style={[{ flex: 1, minWidth: 0 }, active ? { opacity } : undefined]}>
+    <Animated.View style={[{ flexShrink: 1 }, active ? { opacity } : undefined]}>
       <Text style={style} numberOfLines={1}>
         {text || ' '}
       </Text>
     </Animated.View>
+  );
+}
+
+function usePulse(active: boolean) {
+  const value = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    if (!active) {
+      value.setValue(0);
+      return;
+    }
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(value, { toValue: 1, duration: 500, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
+        Animated.timing(value, { toValue: 0, duration: 500, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
+      ])
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [active, value]);
+  return value;
+}
+
+// Ícone com leve "respiração" (escala) enquanto ativo — dá a pista
+// visual de "acontecendo agora" além do shimmer do texto.
+function AnimatedIcon({ icon, active, style }: { icon: string; active: boolean; style: object }) {
+  const pulse = usePulse(active);
+  const scale = pulse.interpolate({ inputRange: [0, 1], outputRange: [1, 1.3] });
+  return (
+    <Animated.Text style={[style, active ? { transform: [{ scale }] } : undefined]}>{icon}</Animated.Text>
   );
 }
 
@@ -101,7 +138,7 @@ export function ToolCard({ part, theme }: { part: ToolPart; theme: Theme }) {
       style={styles.card}
     >
       <View style={styles.row}>
-        <Text style={styles.icon}>{meta.icon}</Text>
+        <AnimatedIcon icon={meta.icon} active={isPending} style={styles.icon} />
         <ShimmerLabel text={isPending ? `${title}…` : title} active={isPending} style={styles.title} />
         {canExpand && <Text style={styles.caret}>{open ? '▾' : '▸'}</Text>}
       </View>
@@ -125,7 +162,7 @@ export function ThinkingRow({ theme, executing }: { theme: Theme; executing: boo
   return (
     <View style={styles.card}>
       <View style={styles.row}>
-        <Text style={styles.icon}>🤔</Text>
+        <AnimatedIcon icon="🤔" active style={styles.icon} />
         <ShimmerLabel text={executing ? 'Executando…' : 'Pensando…'} active style={styles.title} />
       </View>
     </View>
@@ -176,7 +213,6 @@ function createCardStyles(theme: Theme, isError: boolean) {
       fontSize: 13,
     },
     title: {
-      flex: 1,
       fontSize: 12,
       fontWeight: '600',
       color: isError ? theme.danger : theme.textDim,
