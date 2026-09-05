@@ -8,7 +8,7 @@ export function BrandHeader({ theme }: { theme: Theme }) {
   const styles = createStyles(theme);
   return (
     <View style={styles.row}>
-      <Image source={require('../../assets/opencode-icon-cutout.png')} style={styles.logo} resizeMode="contain" />
+      <Image source={require('../../assets/brand-logo.png')} style={styles.logo} resizeMode="contain" />
       <Text style={styles.title}>
         OpenCode <Text style={styles.subtitle}>by alltomatos</Text>
       </Text>
@@ -24,8 +24,8 @@ function createStyles(theme: Theme) {
       gap: 8,
     },
     logo: {
-      width: 26,
-      height: 26,
+      width: 30,
+      height: 34,
     },
     title: {
       fontSize: 17,
