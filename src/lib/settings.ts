@@ -73,3 +73,34 @@ export function useSettings(): SettingsContextValue {
   if (!ctx) throw new Error('useSettings() precisa estar dentro do <SettingsContext.Provider>.');
   return ctx;
 }
+
+// Modelo preferido, lembrado por projeto (servidor + diretório) — não
+// por sessão individual. Pedido explícito do usuário: escolher um
+// modelo, mandar mensagem, sair e voltar (mesmo numa sessão nova do
+// mesmo projeto) deve manter o modelo escolhido em vez de cair de
+// volta no padrão do servidor.
+const PROJECT_MODEL_PREFIX = 'opencode-mobile:model:';
+
+export type ProjectModel = { providerID: string; modelID: string };
+
+export function projectModelKey(serverId: string, directory: string): string {
+  return `${PROJECT_MODEL_PREFIX}${serverId}:${directory}`;
+}
+
+export async function getProjectModel(key: string): Promise<ProjectModel | null> {
+  try {
+    const raw = await AsyncStorage.getItem(key);
+    return raw ? (JSON.parse(raw) as ProjectModel) : null;
+  } catch {
+    return null;
+  }
+}
+
+export async function setProjectModel(key: string, model: ProjectModel): Promise<void> {
+  try {
+    await AsyncStorage.setItem(key, JSON.stringify(model));
+  } catch {
+    // Preferência não persistida — a sessão atual continua funcionando
+    // normalmente, só não vai lembrar da próxima vez.
+  }
+}

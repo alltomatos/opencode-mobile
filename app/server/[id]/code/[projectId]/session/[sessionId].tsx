@@ -47,7 +47,7 @@ import {
   ThinkingRow,
   ToolCard,
 } from '../../../../../../src/components/ActivityParts';
-import { useSettings } from '../../../../../../src/lib/settings';
+import { getProjectModel, projectModelKey, setProjectModel, useSettings } from '../../../../../../src/lib/settings';
 
 // Ver docs/prd/mobile-app.md §6.1, item 3 — "modo" no app de referência
 // é dois mecanismos combinados: agente (build/plan) + nível de
@@ -109,6 +109,7 @@ export default function SessionChatScreen() {
   const theme = useTheme();
   const styles = createStyles(theme);
   const { settings } = useSettings();
+  const modelKey = projectModelKey(id, decodeURIComponent(projectId));
 
   const [server, setServer] = useState<ServerConnection | null | undefined>(undefined);
   const [token, setToken] = useState<string | null>(null);
@@ -193,12 +194,17 @@ export default function SessionChatScreen() {
     listCommands(server, token)
       .then((data) => !cancelled && setCommands(data))
       .catch(() => {});
-    listProviders(server, token)
-      .then((data) => {
+    // Prioridade: modelo salvo pra esse projeto (setado numa sessão
+    // anterior) > default do servidor. Sem isso, toda sessão nova (ou
+    // voltar pra uma existente depois de sair) esquecia a escolha e
+    // caía de volta no modelo padrão — reportado pelo usuário.
+    Promise.all([listProviders(server, token), getProjectModel(modelKey)])
+      .then(([data, saved]) => {
         if (cancelled) return;
         setProviders(data);
         setModel((prev) => {
           if (prev) return prev;
+          if (saved) return saved;
           const firstConnected = data.connected[0];
           const defaultModelID = firstConnected ? data.default[firstConnected] : undefined;
           if (!firstConnected || !defaultModelID) return prev;
@@ -726,7 +732,9 @@ export default function SessionChatScreen() {
                         key={m.id}
                         style={styles.modalOption}
                         onPress={() => {
-                          setModel({ providerID: provider.id, modelID: m.id });
+                          const next = { providerID: provider.id, modelID: m.id };
+                          setModel(next);
+                          setProjectModel(modelKey, next).catch(() => {});
                           setShowModelPicker(false);
                         }}
                       >
