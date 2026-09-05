@@ -70,10 +70,7 @@ export default function ProjectListScreen() {
         }
         renderItem={({ item }) => (
           <Link href={`/server/${id}/code/${encodeURIComponent(item.path)}`} asChild>
-            <Pressable
-              style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}
-              android_ripple={{ color: theme.border }}
-            >
+            <Pressable style={styles.row} android_ripple={{ color: theme.border }}>
               <View style={styles.rowIconWrap}>
                 <Ionicons name="folder-outline" size={20} color={theme.accent} />
               </View>
@@ -87,7 +84,7 @@ export default function ProjectListScreen() {
       />
 
       <Link href={`/server/${id}/code/add`} asChild>
-        <Pressable style={({ pressed }) => [styles.addButton, pressed && styles.addButtonPressed]}>
+        <Pressable style={styles.addButton} android_ripple={{ color: theme.accentDim }}>
           <Ionicons name="add-circle" size={20} color={theme.accentText} />
           <Text style={styles.addButtonText}>Adicionar projeto</Text>
         </Pressable>
@@ -146,9 +143,6 @@ function createStyles(theme: Theme) {
       borderColor: theme.border,
       minHeight: 44,
     },
-    rowPressed: {
-      opacity: 0.7,
-    },
     rowIconWrap: {
       width: 32,
       height: 32,
@@ -202,9 +196,6 @@ function createStyles(theme: Theme) {
       borderRadius: 12,
       backgroundColor: theme.accent,
       minHeight: 44,
-    },
-    addButtonPressed: {
-      opacity: 0.85,
     },
     addButtonText: {
       fontSize: 15,
