@@ -2,7 +2,7 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { Button, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 
-import { createSession, PROJECTS_ROOT, runShell } from '../../../../src/lib/api';
+import { createSession, extractOutput, PROJECTS_ROOT, runShell } from '../../../../src/lib/api';
 import { getServerToken, listServers, ServerConnection } from '../../../../src/lib/servers';
 import { Theme, useTheme } from '../../../../src/lib/theme';
 
@@ -62,12 +62,21 @@ export default function AddProjectScreen() {
       // código já nasce versionado) — a listagem do app não depende
       // disso, ela lista pastas de verdade em PROJECTS_ROOT via
       // GET /file, então uma pasta sem git aparece do mesmo jeito.
+      // O marcador no fim só imprime se a cadeia inteira (`&&`) deu
+      // certo — POST /session/:id/shell responde 200 mesmo quando o
+      // comando falha (ex.: clonar repo privado sem credencial), então
+      // sem isso o app "acha" que deu certo mesmo tendo falhado.
+      const OK_MARKER = '___OPENCODE_MOBILE_OK___';
       const command =
         mode === 'github'
-          ? `git clone "${githubUrl.trim()}" "${fullPath}"`
-          : `mkdir -p "${fullPath}" && git -C "${fullPath}" init`;
+          ? `git clone "${githubUrl.trim()}" "${fullPath}" && echo ${OK_MARKER}`
+          : `mkdir -p "${fullPath}" && git -C "${fullPath}" init && echo ${OK_MARKER}`;
       setStatus(mode === 'github' ? 'Clonando repositório…' : 'Criando pasta…');
-      await runShell(server, token, bootstrap.id, command);
+      const result = await runShell(server, token, bootstrap.id, command);
+      const output = extractOutput(result);
+      if (!output.includes(OK_MARKER)) {
+        throw new Error(output.trim() || 'O comando não terminou como esperado.');
+      }
 
       router.replace(`/server/${id}/code/${encodeURIComponent(fullPath)}`);
     } catch (e) {

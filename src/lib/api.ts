@@ -53,6 +53,25 @@ export type MessageWithParts = {
   parts: Part[];
 };
 
+// Junta o texto visível de uma mensagem — partes de texto, mais saída
+// (ou erro) de partes de tool completadas/com erro (shell, etc.). Usa
+// isso pra decidir se um comando via runShell() realmente deu certo:
+// o endpoint HTTP responde 200 mesmo quando o comando de shell falha
+// (ex.: `git clone` de repo privado) — só o conteúdo da parte de tool
+// revela o resultado real.
+export function extractOutput(message: MessageWithParts): string {
+  return message.parts
+    .map((p) => {
+      if (p.type === 'text') return (p as TextPart).text;
+      const state = (p as { type: string; state?: { status?: string; output?: string; error?: string } }).state;
+      if (state?.status === 'completed') return state.output ?? '';
+      if (state?.status === 'error') return state.error ?? '';
+      return '';
+    })
+    .filter(Boolean)
+    .join('\n');
+}
+
 // Conferido contra packages/schema/src/v1/{permission,question}.ts no
 // repo do fork — são as rotas "v1" ativas (/permission, /question);
 // existe também um schema "v2" em desenvolvimento que este app não usa.
