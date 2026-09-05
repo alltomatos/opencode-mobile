@@ -106,6 +106,17 @@ export function describeConnection(url: string): string {
   return 'Internet';
 }
 
+export async function updateServer(id: string, patch: { label?: string; url?: string }): Promise<void> {
+  const servers = await readManifest();
+  await writeManifest(servers.map((s) => (s.id === id ? { ...s, ...patch } : s)));
+}
+
+// Só usado quando o usuário troca o token na edição do servidor (ex.:
+// o desktop gerou um token novo) — trocar a URL/label não mexe nisso.
+export async function updateServerToken(id: string, token: string): Promise<void> {
+  await SecureStore.setItemAsync(tokenKey(id), token);
+}
+
 export async function removeServer(id: string): Promise<void> {
   const servers = await readManifest();
   await writeManifest(servers.filter((s) => s.id !== id));

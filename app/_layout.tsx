@@ -40,6 +40,7 @@ function RootNavigator() {
         <Stack.Screen name="index" options={{ headerTitle: () => <BrandHeader theme={theme} /> }} />
         <Stack.Screen name="pair" options={{ title: 'Parear servidor', presentation: 'modal' }} />
         <Stack.Screen name="server/[id]/index" options={{ title: 'Servidor' }} />
+        <Stack.Screen name="server/[id]/edit" options={{ title: 'Editar servidor', presentation: 'modal' }} />
         <Stack.Screen name="server/[id]/settings" options={{ title: 'Configurações' }} />
         <Stack.Screen name="server/[id]/code/index" options={{ title: 'Projetos' }} />
         <Stack.Screen name="server/[id]/code/add" options={{ title: 'Adicionar projeto', presentation: 'modal' }} />

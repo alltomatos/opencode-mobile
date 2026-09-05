@@ -31,6 +31,7 @@ import {
   ProviderList,
   QuestionRequest,
   ReasoningPart,
+  renameSession,
   replyPermission,
   replyQuestion,
   runCommand,
@@ -48,6 +49,7 @@ import {
   ThinkingRow,
   ToolCard,
 } from '../../../../../../src/components/ActivityParts';
+import { PromptModal } from '../../../../../../src/components/ui/PromptModal';
 import { notifyAgentDone, notifyError, notifyPermissionAsked } from '../../../../../../src/lib/notifications';
 import { getProjectModel, projectModelKey, setProjectModel, useSettings } from '../../../../../../src/lib/settings';
 
@@ -111,12 +113,14 @@ export default function SessionChatScreen() {
   const theme = useTheme();
   const styles = createStyles(theme);
   const { settings } = useSettings();
-  const modelKey = projectModelKey(id, decodeURIComponent(projectId));
+  const directory = decodeURIComponent(projectId);
+  const modelKey = projectModelKey(id, directory);
 
   const [server, setServer] = useState<ServerConnection | null | undefined>(undefined);
   const [token, setToken] = useState<string | null>(null);
   const [messages, setMessages] = useState<MessageWithParts[] | null>(null);
   const [sessionTitle, setSessionTitle] = useState<string | null>(null);
+  const [showRenameModal, setShowRenameModal] = useState(false);
   const [draft, setDraft] = useState('');
   const [sending, setSending] = useState(false);
   // Fila de mensagens digitadas enquanto uma anterior ainda está em
@@ -481,6 +485,19 @@ export default function SessionChatScreen() {
     }
   }
 
+  async function handleRenameSession(newTitle: string) {
+    setShowRenameModal(false);
+    if (!server || !token) return;
+    const previous = sessionTitle;
+    setSessionTitle(newTitle);
+    try {
+      await renameSession(server, token, sessionId, directory, newTitle);
+    } catch (e) {
+      setSessionTitle(previous);
+      setError(e instanceof Error ? e.message : 'Falha ao renomear sessão.');
+    }
+  }
+
   const pendingPermission = permissionQueue[0];
   const pendingQuestion = questionQueue[0];
   // Rótulo do ThinkingRow: "Executando…" enquanto alguma tool está
@@ -515,7 +532,30 @@ export default function SessionChatScreen() {
 
   return (
     <View style={[styles.container, { paddingBottom: keyboardHeight }]}>
-      <Stack.Screen options={{ title: headerTitle }} />
+      <Stack.Screen
+        options={{
+          headerTitle: () => (
+            <TouchableOpacity
+              style={styles.headerTitleButton}
+              onPress={() => setShowRenameModal(true)}
+              hitSlop={8}
+            >
+              <Text style={styles.headerTitleText} numberOfLines={1}>
+                {headerTitle}
+              </Text>
+              <Ionicons name="create-outline" size={15} color={theme.textFaint} />
+            </TouchableOpacity>
+          ),
+        }}
+      />
+
+      <PromptModal
+        visible={showRenameModal}
+        title="Renomear sessão"
+        initialValue={headerTitle}
+        onCancel={() => setShowRenameModal(false)}
+        onSubmit={handleRenameSession}
+      />
 
       {children.length > 0 && (
         <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.childrenRow}>
@@ -781,6 +821,18 @@ function createStyles(theme: Theme) {
     container: {
       flex: 1,
       backgroundColor: theme.bg,
+    },
+    headerTitleButton: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
+      maxWidth: 220,
+    },
+    headerTitleText: {
+      fontSize: 17,
+      fontWeight: '600',
+      color: theme.text,
+      flexShrink: 1,
     },
     list: {
       flex: 1,

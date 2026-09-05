@@ -130,6 +130,12 @@ export default function ServerHubScreen() {
       </Section>
 
       <Section>
+        <Row
+          icon="pencil-outline"
+          iconColor={theme.textFaint}
+          title="Editar servidor"
+          onPress={() => router.push(`/server/${id}/edit`)}
+        />
         <Row title="Remover servidor" destructive onPress={confirmRemoveServer} last />
       </Section>
     </ScrollView>

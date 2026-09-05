@@ -426,6 +426,31 @@ export async function deleteSession(
   }
 }
 
+// PATCH /session/:id — conferido em
+// packages/opencode/src/server/routes/instance/httpapi/groups/session.ts
+// (UpdatePayload): `title` é o único campo que usamos aqui (também
+// aceita metadata/permission/time.archived, não usados no app).
+export async function renameSession(
+  server: ServerConnection,
+  token: string,
+  sessionID: string,
+  directory: string,
+  title: string
+): Promise<Session> {
+  const url = new URL(`/session/${sessionID}`, server.url);
+  url.searchParams.set('auth_token', token);
+  url.searchParams.set('directory', directory);
+  const res = await fetch(url.toString(), {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ title }),
+  });
+  if (!res.ok) {
+    throw new Error(`PATCH /session/${sessionID} falhou: ${await errorDetail(res)}`);
+  }
+  return (await res.json()) as Session;
+}
+
 export async function listMessages(
   server: ServerConnection,
   token: string,
