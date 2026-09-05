@@ -1,7 +1,9 @@
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { Button, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { StyleSheet, Text, TextInput, View } from 'react-native';
 
+import { PrimaryButton } from '../../../../src/components/ui/Button';
+import { Section } from '../../../../src/components/ui/Section';
 import { PROJECTS_ROOT, runManagedShell } from '../../../../src/lib/api';
 import { getServerToken, listServers, ServerConnection } from '../../../../src/lib/servers';
 import { Theme, useTheme } from '../../../../src/lib/theme';
@@ -72,59 +74,63 @@ export default function AddProjectScreen() {
 
   return (
     <View style={styles.container}>
-      <View style={styles.tabs}>
-        <TouchableOpacity
-          style={[styles.tab, mode === 'folder' && styles.tabActive]}
-          onPress={() => setMode('folder')}
+      <View style={styles.segmented}>
+        <View
+          onTouchEnd={() => setMode('folder')}
+          style={[styles.segment, mode === 'folder' && styles.segmentActive]}
         >
-          <Text style={[styles.tabText, mode === 'folder' && styles.tabTextActive]}>Pasta nova</Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.tab, mode === 'github' && styles.tabActive]}
-          onPress={() => setMode('github')}
+          <Text style={[styles.segmentText, mode === 'folder' && styles.segmentTextActive]}>Pasta nova</Text>
+        </View>
+        <View
+          onTouchEnd={() => setMode('github')}
+          style={[styles.segment, mode === 'github' && styles.segmentActive]}
         >
-          <Text style={[styles.tabText, mode === 'github' && styles.tabTextActive]}>Clonar do GitHub</Text>
-        </TouchableOpacity>
+          <Text style={[styles.segmentText, mode === 'github' && styles.segmentTextActive]}>
+            Clonar do GitHub
+          </Text>
+        </View>
       </View>
 
       {mode === 'folder' ? (
-        <>
-          <Text style={styles.label}>Nome do projeto</Text>
-          <Text style={styles.hint}>Cria {PROJECTS_ROOT}/{name.trim() || '<nome>'}</Text>
-          <TextInput
-            style={styles.input}
-            autoCapitalize="none"
-            autoCorrect={false}
-            placeholder="meu-projeto"
-            placeholderTextColor={theme.placeholder}
-            value={name}
-            onChangeText={setName}
-            autoFocus
-          />
-        </>
+        <Section title="Nome do projeto" footer={`Cria ${PROJECTS_ROOT}/${name.trim() || '<nome>'}`}>
+          <View style={styles.inputRow}>
+            <TextInput
+              style={styles.input}
+              autoCapitalize="none"
+              autoCorrect={false}
+              placeholder="meu-projeto"
+              placeholderTextColor={theme.placeholder}
+              value={name}
+              onChangeText={setName}
+              autoFocus
+            />
+          </View>
+        </Section>
       ) : (
-        <>
-          <Text style={styles.label}>URL do repositório</Text>
-          <Text style={styles.hint}>
-            Clona em {PROJECTS_ROOT}/{slugFromGithubUrl(githubUrl) || '<repositório>'}
-          </Text>
-          <TextInput
-            style={styles.input}
-            autoCapitalize="none"
-            autoCorrect={false}
-            placeholder="https://github.com/usuario/repositorio"
-            placeholderTextColor={theme.placeholder}
-            value={githubUrl}
-            onChangeText={setGithubUrl}
-            autoFocus
-          />
-        </>
+        <Section
+          title="URL do repositório"
+          footer={`Clona em ${PROJECTS_ROOT}/${slugFromGithubUrl(githubUrl) || '<repositório>'}`}
+        >
+          <View style={styles.inputRow}>
+            <TextInput
+              style={styles.input}
+              autoCapitalize="none"
+              autoCorrect={false}
+              keyboardType="url"
+              placeholder="https://github.com/usuario/repositorio"
+              placeholderTextColor={theme.placeholder}
+              value={githubUrl}
+              onChangeText={setGithubUrl}
+              autoFocus
+            />
+          </View>
+        </Section>
       )}
 
       {status && <Text style={styles.status}>{status}</Text>}
       {error && <Text style={styles.error}>{error}</Text>}
 
-      <Button title={saving ? 'Aguarde…' : 'Criar'} onPress={handleCreate} disabled={!canSubmit || saving} />
+      <PrimaryButton title="Criar" onPress={handleCreate} disabled={!canSubmit} loading={saving} />
     </View>
   );
 }
@@ -133,54 +139,44 @@ function createStyles(theme: Theme) {
   return StyleSheet.create({
     container: {
       flex: 1,
-      padding: 24,
-      gap: 12,
+      padding: 16,
+      gap: 20,
       backgroundColor: theme.bg,
     },
-    tabs: {
+    segmented: {
       flexDirection: 'row',
-      gap: 8,
-      marginBottom: 8,
-    },
-    tab: {
-      flex: 1,
-      paddingVertical: 10,
-      borderRadius: 10,
-      alignItems: 'center',
       backgroundColor: theme.bgAlt,
-      borderWidth: 1,
-      borderColor: theme.border,
+      borderRadius: 9,
+      padding: 2,
+      gap: 2,
     },
-    tabActive: {
-      backgroundColor: theme.accent,
-      borderColor: theme.accent,
+    segment: {
+      flex: 1,
+      paddingVertical: 7,
+      borderRadius: 7,
+      alignItems: 'center',
     },
-    tabText: {
+    segmentActive: {
+      backgroundColor: theme.surface,
+    },
+    segmentText: {
       fontWeight: '600',
       color: theme.textDim,
       fontSize: 13,
     },
-    tabTextActive: {
-      color: theme.accentText,
+    segmentTextActive: {
+      color: theme.accent,
     },
-    label: {
-      color: theme.text,
-      fontSize: 14,
-      fontWeight: '600',
-    },
-    hint: {
-      color: theme.textFaint,
-      fontSize: 12,
-      marginBottom: 4,
+    inputRow: {
+      paddingHorizontal: 16,
+      paddingVertical: 4,
+      minHeight: 44,
+      justifyContent: 'center',
     },
     input: {
-      borderWidth: 1,
-      borderColor: theme.border,
-      borderRadius: 10,
-      paddingHorizontal: 14,
-      paddingVertical: 12,
-      fontSize: 15,
+      fontSize: 16,
       color: theme.text,
+      padding: 0,
     },
     status: {
       color: theme.accent,

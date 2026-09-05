@@ -1,8 +1,9 @@
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { router } from 'expo-router';
 import { useState } from 'react';
-import { Button, KeyboardAvoidingView, Platform, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, KeyboardAvoidingView, Platform, StyleSheet, Text, TextInput, View } from 'react-native';
 
+import { PrimaryButton, TextButton } from '../src/components/ui/Button';
 import { addServer, parsePairingPayload, verifyServer } from '../src/lib/servers';
 
 // Fase 1 (docs/prd/mobile-api-reference.md §4): decodifica o payload
@@ -39,24 +40,24 @@ export default function PairScreen() {
 
   if (!permission.granted) {
     return (
-      <View style={styles.container}>
-        <Text style={styles.subtitle}>Precisamos da câmera para ler o QR code de pareamento.</Text>
-        <Button title="Permitir câmera" onPress={requestPermission} />
+      <View style={styles.permissionContainer}>
+        <Text style={styles.subtitle}>Precisamos da câmera pra ler o QR code de pareamento.</Text>
+        <PrimaryButton title="Permitir câmera" onPress={requestPermission} />
       </View>
     );
   }
 
   return (
-    <KeyboardAvoidingView
-      style={styles.container}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-    >
+    <KeyboardAvoidingView style={styles.container} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
       {!showManual && (
-        <CameraView
-          style={StyleSheet.absoluteFill}
-          barcodeScannerSettings={{ barcodeTypes: ['qr'] }}
-          onBarcodeScanned={(result) => pair(result.data)}
-        />
+        <>
+          <CameraView
+            style={StyleSheet.absoluteFill}
+            barcodeScannerSettings={{ barcodeTypes: ['qr'] }}
+            onBarcodeScanned={(result) => pair(result.data)}
+          />
+          <View pointerEvents="none" style={styles.scanFrame} />
+        </>
       )}
 
       {showManual && (
@@ -68,27 +69,31 @@ export default function PairScreen() {
             autoCapitalize="none"
             autoCorrect={false}
             placeholder='{"v":1,"url":"...","token":"...","label":"..."}'
-            placeholderTextColor="#6b7280"
+            placeholderTextColor="#8e8e93"
             value={manualPayload}
             onChangeText={setManualPayload}
           />
-          <Button title="Parear" onPress={() => pair(manualPayload)} />
+          <PrimaryButton title="Parear" onPress={() => pair(manualPayload)} />
         </View>
       )}
 
       <View style={styles.overlay}>
-        {status === 'checking' && <Text style={styles.overlayText}>Validando servidor…</Text>}
+        {status === 'checking' && (
+          <View style={styles.statusPill}>
+            <ActivityIndicator color="#fff" />
+            <Text style={styles.overlayText}>Validando servidor…</Text>
+          </View>
+        )}
         {status === 'error' && (
           <>
-            <Text style={styles.overlayText}>{error}</Text>
-            <Button title="Tentar de novo" onPress={() => setStatus('scanning')} />
+            <View style={styles.statusPill}>
+              <Text style={styles.overlayText}>{error}</Text>
+            </View>
+            <PrimaryButton title="Tentar de novo" onPress={() => setStatus('scanning')} />
           </>
         )}
         {status === 'scanning' && (
-          <Button
-            title={showManual ? 'Usar câmera' : 'Colar manualmente'}
-            onPress={() => setShowManual((v) => !v)}
-          />
+          <TextButton title={showManual ? 'Usar câmera' : 'Colar manualmente'} onPress={() => setShowManual((v) => !v)} />
         )}
       </View>
     </KeyboardAvoidingView>
@@ -100,10 +105,27 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#000',
   },
+  permissionContainer: {
+    flex: 1,
+    backgroundColor: '#000',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 24,
+    gap: 16,
+  },
   subtitle: {
     textAlign: 'center',
-    color: '#6b7280',
-    padding: 24,
+    color: '#98989f',
+  },
+  scanFrame: {
+    position: 'absolute',
+    top: '28%',
+    left: '15%',
+    right: '15%',
+    aspectRatio: 1,
+    borderRadius: 24,
+    borderWidth: 2,
+    borderColor: 'rgba(255,255,255,0.85)',
   },
   manualForm: {
     flex: 1,
@@ -113,15 +135,15 @@ const styles = StyleSheet.create({
   },
   manualLabel: {
     color: '#fff',
-    fontSize: 14,
+    fontSize: 15,
   },
   manualInput: {
     minHeight: 120,
     color: '#fff',
-    borderWidth: 1,
-    borderColor: '#374151',
-    borderRadius: 8,
-    padding: 12,
+    backgroundColor: '#1c1c1e',
+    borderRadius: 12,
+    padding: 14,
+    fontSize: 14,
     fontFamily: Platform.select({ ios: 'Menlo', android: 'monospace' }),
     textAlignVertical: 'top',
   },
@@ -133,11 +155,18 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 12,
   },
+  statusPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: 'rgba(28,28,30,0.85)',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 14,
+  },
   overlayText: {
     color: '#fff',
+    fontSize: 14,
     textAlign: 'center',
-    backgroundColor: 'rgba(0,0,0,0.6)',
-    padding: 12,
-    borderRadius: 8,
   },
 });

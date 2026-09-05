@@ -1,3 +1,4 @@
+import { Ionicons } from '@expo/vector-icons';
 import { Link, Stack, useLocalSearchParams } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
 import {
@@ -712,6 +713,7 @@ export default function SessionChatScreen() {
       <Modal visible={showModePicker} transparent animationType="fade" onRequestClose={() => setShowModePicker(false)}>
         <TouchableOpacity style={styles.modalBackdrop} activeOpacity={1} onPress={() => setShowModePicker(false)}>
           <View style={styles.modalSheet}>
+            <View style={styles.modalGrabber} />
             {(['manual', 'plan', 'auto'] as Mode[]).map((m) => (
               <TouchableOpacity
                 key={m}
@@ -724,6 +726,7 @@ export default function SessionChatScreen() {
                 <Text style={[styles.modalOptionText, mode === m && styles.modalOptionTextActive]}>
                   {MODE_LABEL[m]}
                 </Text>
+                {mode === m && <Ionicons name="checkmark" size={18} color={theme.accent} />}
               </TouchableOpacity>
             ))}
           </View>
@@ -738,6 +741,7 @@ export default function SessionChatScreen() {
       >
         <TouchableOpacity style={styles.modalBackdrop} activeOpacity={1} onPress={() => setShowModelPicker(false)}>
           <ScrollView style={styles.modalSheetScroll}>
+            <View style={styles.modalGrabber} />
             {(providers?.all ?? [])
               .filter((p) => providers?.connected.includes(p.id))
               .map((provider) => (
@@ -759,6 +763,7 @@ export default function SessionChatScreen() {
                         <Text style={[styles.modalOptionText, active && styles.modalOptionTextActive]}>
                           {m.name}
                         </Text>
+                        {active && <Ionicons name="checkmark" size={18} color={theme.accent} />}
                       </TouchableOpacity>
                     );
                   })}
@@ -817,9 +822,9 @@ function createStyles(theme: Theme) {
     },
     bubble: {
       maxWidth: '100%',
-      borderRadius: 14,
+      borderRadius: 18,
       paddingHorizontal: 14,
-      paddingVertical: 10,
+      paddingVertical: 9,
     },
     bubbleUser: {
       backgroundColor: theme.accent,
@@ -838,17 +843,20 @@ function createStyles(theme: Theme) {
     askCard: {
       marginHorizontal: 12,
       marginBottom: 8,
-      padding: 14,
-      borderRadius: 12,
-      backgroundColor: theme.warnBg,
-      borderWidth: 1,
-      borderColor: theme.warnBorder,
+      padding: 16,
+      borderRadius: 16,
+      backgroundColor: theme.surface,
       gap: 8,
+      shadowColor: '#000',
+      shadowOpacity: 0.12,
+      shadowRadius: 12,
+      shadowOffset: { width: 0, height: 4 },
+      elevation: 4,
     },
     askTitle: {
-      fontSize: 15,
-      fontWeight: '600',
-      color: theme.warnText,
+      fontSize: 16,
+      fontWeight: '700',
+      color: theme.text,
     },
     askSubtitle: {
       fontSize: 13,
@@ -861,34 +869,32 @@ function createStyles(theme: Theme) {
     },
     askButton: {
       flex: 1,
-      backgroundColor: theme.accent,
-      borderRadius: 10,
-      paddingVertical: 10,
+      backgroundColor: theme.bgAlt,
+      borderRadius: 12,
+      paddingVertical: 11,
       alignItems: 'center',
     },
     askButtonReject: {
-      backgroundColor: theme.dangerBg,
+      backgroundColor: theme.bgAlt,
     },
     askButtonText: {
-      color: theme.accentText,
+      color: theme.accent,
       fontWeight: '600',
-      fontSize: 13,
+      fontSize: 15,
     },
     askButtonTextReject: {
       color: theme.danger,
       fontWeight: '600',
-      fontSize: 13,
+      fontSize: 15,
     },
     askOptions: {
       gap: 8,
       marginTop: 4,
     },
     askOption: {
-      borderWidth: 1,
-      borderColor: theme.warnBorder,
-      borderRadius: 10,
-      padding: 10,
-      backgroundColor: theme.surface,
+      borderRadius: 12,
+      padding: 12,
+      backgroundColor: theme.bgAlt,
     },
     askOptionLabel: {
       fontWeight: '600',
@@ -934,14 +940,12 @@ function createStyles(theme: Theme) {
       gap: 4,
       paddingHorizontal: 12,
       paddingVertical: 7,
-      borderRadius: 14,
+      borderRadius: 16,
       backgroundColor: theme.bgAlt,
-      borderWidth: 1,
-      borderColor: theme.border,
       maxWidth: 200,
     },
     dropdownChipText: {
-      fontSize: 12,
+      fontSize: 13,
       fontWeight: '600',
       color: theme.text,
     },
@@ -954,40 +958,50 @@ function createStyles(theme: Theme) {
       backgroundColor: 'rgba(0,0,0,0.4)',
       justifyContent: 'flex-end',
     },
+    modalGrabber: {
+      alignSelf: 'center',
+      width: 36,
+      height: 5,
+      borderRadius: 3,
+      backgroundColor: theme.border,
+      marginTop: 8,
+      marginBottom: 4,
+    },
     modalSheet: {
       backgroundColor: theme.surface,
-      borderTopLeftRadius: 16,
-      borderTopRightRadius: 16,
-      paddingVertical: 8,
+      borderTopLeftRadius: 20,
+      borderTopRightRadius: 20,
       paddingBottom: 24,
     },
     modalSheetScroll: {
       backgroundColor: theme.surface,
-      borderTopLeftRadius: 16,
-      borderTopRightRadius: 16,
+      borderTopLeftRadius: 20,
+      borderTopRightRadius: 20,
       maxHeight: '60%',
-      paddingVertical: 8,
     },
     modalGroupLabel: {
       paddingHorizontal: 16,
-      paddingTop: 12,
-      paddingBottom: 4,
-      fontSize: 12,
-      fontWeight: '700',
-      color: theme.textFaint,
+      paddingTop: 16,
+      paddingBottom: 6,
+      fontSize: 13,
+      fontWeight: '600',
+      color: theme.textDim,
       textTransform: 'uppercase',
     },
     modalOption: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
       paddingHorizontal: 16,
-      paddingVertical: 12,
+      paddingVertical: 13,
     },
     modalOptionText: {
-      fontSize: 15,
+      fontSize: 16,
       color: theme.text,
     },
     modalOptionTextActive: {
       color: theme.accent,
-      fontWeight: '700',
+      fontWeight: '600',
     },
     suggestions: {
       marginHorizontal: 12,
@@ -1036,19 +1050,20 @@ function createStyles(theme: Theme) {
     input: {
       flex: 1,
       maxHeight: 120,
-      borderWidth: 1,
-      borderColor: theme.border,
-      borderRadius: 20,
-      paddingHorizontal: 14,
-      paddingVertical: 10,
-      fontSize: 15,
+      minHeight: 38,
+      backgroundColor: theme.bgAlt,
+      borderRadius: 19,
+      paddingHorizontal: 16,
+      paddingVertical: 9,
+      fontSize: 16,
       color: theme.text,
     },
     sendButton: {
+      minHeight: 38,
+      justifyContent: 'center',
       backgroundColor: theme.accent,
-      borderRadius: 20,
+      borderRadius: 19,
       paddingHorizontal: 16,
-      paddingVertical: 10,
     },
     sendButtonDisabled: {
       backgroundColor: theme.accentDim,
@@ -1056,6 +1071,7 @@ function createStyles(theme: Theme) {
     sendButtonText: {
       color: theme.accentText,
       fontWeight: '600',
+      fontSize: 15,
     },
   });
 }

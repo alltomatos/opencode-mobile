@@ -1,32 +1,38 @@
+import { Ionicons } from '@expo/vector-icons';
 import { useEffect, useRef, useState } from 'react';
 import { Animated, Easing, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
 import { Part, ReasoningPart, ToolPart } from '../lib/api';
 import { Theme } from '../lib/theme';
 
+type IoniconName = keyof typeof Ionicons.glyphMap;
+const AnimatedIonicon = Animated.createAnimatedComponent(Ionicons);
+
 // Ids reais conferidos em D:\dev\opencode\packages\opencode\src\tool\*.ts
 // (cada arquivo passa esse literal pro primeiro argumento de
 // Tool.define) — shell.ts usa "bash", não "shell"; apply_patch.ts usa
 // "apply_patch"; todo.ts usa "todowrite". Ver docs/prd/mobile-app.md.
-const TOOL_META: Record<string, { icon: string; label: string }> = {
-  bash: { icon: '💻', label: 'Shell' },
-  read: { icon: '👓', label: 'Lendo arquivo' },
-  write: { icon: '📝', label: 'Escrevendo arquivo' },
-  edit: { icon: '✏️', label: 'Editando arquivo' },
-  apply_patch: { icon: '✏️', label: 'Aplicando patch' },
-  glob: { icon: '🔍', label: 'Buscando arquivos' },
-  grep: { icon: '🔍', label: 'Buscando texto' },
-  webfetch: { icon: '🌐', label: 'Buscando página' },
-  websearch: { icon: '🌐', label: 'Pesquisando na web' },
-  task: { icon: '🧩', label: 'Subagente' },
-  skill: { icon: '🧠', label: 'Skill' },
-  question: { icon: '❓', label: 'Pergunta' },
-  memory_search: { icon: '🧠', label: 'Buscando na memória' },
-  memory_save: { icon: '🧠', label: 'Salvando na memória' },
-  lsp: { icon: '🔧', label: 'LSP' },
-  plan_exit: { icon: '📋', label: 'Plano' },
-  browser: { icon: '🖥️', label: 'Navegador' },
-  computer: { icon: '🖥️', label: 'Computador' },
+// Ícones em SVG (Ionicons), não emoji — regra do redesign (emoji
+// depende de fonte do sistema, não escala nem segue tema).
+const TOOL_META: Record<string, { icon: IoniconName; label: string }> = {
+  bash: { icon: 'terminal-outline', label: 'Shell' },
+  read: { icon: 'document-text-outline', label: 'Lendo arquivo' },
+  write: { icon: 'document-outline', label: 'Escrevendo arquivo' },
+  edit: { icon: 'create-outline', label: 'Editando arquivo' },
+  apply_patch: { icon: 'construct-outline', label: 'Aplicando patch' },
+  glob: { icon: 'search-outline', label: 'Buscando arquivos' },
+  grep: { icon: 'search-outline', label: 'Buscando texto' },
+  webfetch: { icon: 'globe-outline', label: 'Buscando página' },
+  websearch: { icon: 'globe-outline', label: 'Pesquisando na web' },
+  task: { icon: 'git-network-outline', label: 'Subagente' },
+  skill: { icon: 'sparkles-outline', label: 'Skill' },
+  question: { icon: 'help-circle-outline', label: 'Pergunta' },
+  memory_search: { icon: 'sparkles-outline', label: 'Buscando na memória' },
+  memory_save: { icon: 'save-outline', label: 'Salvando na memória' },
+  lsp: { icon: 'code-slash-outline', label: 'LSP' },
+  plan_exit: { icon: 'list-outline', label: 'Plano' },
+  browser: { icon: 'desktop-outline', label: 'Navegador' },
+  computer: { icon: 'desktop-outline', label: 'Computador' },
 };
 
 // Partes que o desktop não mostra na timeline (session-ui/message-part.tsx
@@ -106,11 +112,16 @@ function usePulse(active: boolean) {
 
 // Ícone com leve "respiração" (escala) enquanto ativo — dá a pista
 // visual de "acontecendo agora" além do shimmer do texto.
-function AnimatedIcon({ icon, active, style }: { icon: string; active: boolean; style: object }) {
+function AnimatedIcon({ icon, color, active }: { icon: IoniconName; color: string; active: boolean }) {
   const pulse = usePulse(active);
-  const scale = pulse.interpolate({ inputRange: [0, 1], outputRange: [1, 1.3] });
+  const scale = pulse.interpolate({ inputRange: [0, 1], outputRange: [1, 1.2] });
   return (
-    <Animated.Text style={[style, active ? { transform: [{ scale }] } : undefined]}>{icon}</Animated.Text>
+    <AnimatedIonicon
+      name={icon}
+      size={16}
+      color={color}
+      style={active ? { transform: [{ scale }] } : undefined}
+    />
   );
 }
 
@@ -127,12 +138,13 @@ export function ToolCard({
   defaultExpanded?: boolean;
 }) {
   const [open, setOpen] = useState(defaultExpanded);
-  const meta = TOOL_META[part.tool] ?? { icon: '🔧', label: part.tool || 'Ferramenta' };
+  const meta = TOOL_META[part.tool] ?? { icon: 'construct-outline' as IoniconName, label: part.tool || 'Ferramenta' };
   const isPending = part.state.status === 'pending' || part.state.status === 'running';
   const isError = part.state.status === 'error';
   const hideDetails = part.tool === 'skill';
   const title = (part.state as { title?: string }).title || meta.label;
   const styles = createCardStyles(theme, isError);
+  const iconColor = isError ? theme.danger : theme.textDim;
 
   const body = isError ? part.state.error : part.state.output;
   const canExpand = !hideDetails && !isPending && !!body;
@@ -145,9 +157,11 @@ export function ToolCard({
       style={styles.card}
     >
       <View style={styles.row}>
-        <AnimatedIcon icon={meta.icon} active={isPending} style={styles.icon} />
+        <AnimatedIcon icon={meta.icon} color={iconColor} active={isPending} />
         <ShimmerLabel text={isPending ? `${title}…` : title} active={isPending} style={styles.title} />
-        {canExpand && <Text style={styles.caret}>{open ? '▾' : '▸'}</Text>}
+        {canExpand && (
+          <Ionicons name={open ? 'chevron-down' : 'chevron-forward'} size={14} color={theme.textFaint} />
+        )}
       </View>
       {open && canExpand && (
         <Text style={styles.body} numberOfLines={40}>
@@ -169,7 +183,7 @@ export function ThinkingRow({ theme, executing }: { theme: Theme; executing: boo
   return (
     <View style={styles.card}>
       <View style={styles.row}>
-        <AnimatedIcon icon="🤔" active style={styles.icon} />
+        <AnimatedIcon icon="bulb-outline" color={theme.textDim} active />
         <ShimmerLabel text={executing ? 'Executando…' : 'Pensando…'} active style={styles.title} />
       </View>
     </View>
@@ -192,9 +206,11 @@ export function ReasoningCard({ part, theme }: { part: ReasoningPart; theme: The
       style={styles.card}
     >
       <View style={styles.row}>
-        <AnimatedIcon icon="🧠" active={isPending} style={styles.icon} />
+        <AnimatedIcon icon="bulb-outline" color={theme.textDim} active={isPending} />
         <ShimmerLabel text="Pensando…" active={isPending} style={styles.title} />
-        {!!part.text && <Text style={styles.caret}>{open ? '▾' : '▸'}</Text>}
+        {!!part.text && (
+          <Ionicons name={open ? 'chevron-down' : 'chevron-forward'} size={14} color={theme.textFaint} />
+        )}
       </View>
       {open && !!part.text && (
         <Text style={styles.body} numberOfLines={60}>
@@ -221,8 +237,10 @@ export function RetryCard({
   return (
     <View style={styles.card}>
       <View style={styles.row}>
-        <Text style={styles.icon}>⚠️</Text>
-        <Text style={[styles.title, { color: theme.danger }]}>Tentativa {attempt}… {message}</Text>
+        <Ionicons name="warning-outline" size={16} color={theme.danger} />
+        <Text style={[styles.title, { color: theme.danger }]}>
+          Tentativa {attempt}… {message}
+        </Text>
       </View>
     </View>
   );
@@ -233,29 +251,23 @@ function createCardStyles(theme: Theme, isError: boolean) {
     card: {
       alignSelf: 'stretch',
       backgroundColor: theme.toolBg,
-      borderWidth: 1,
-      borderColor: isError ? theme.danger : theme.toolBorder,
-      borderRadius: 10,
-      paddingHorizontal: 10,
-      paddingVertical: 8,
+      borderRadius: 12,
+      paddingHorizontal: 12,
+      paddingVertical: 9,
       marginTop: 4,
+      ...(isError
+        ? { borderWidth: 1, borderColor: theme.danger }
+        : { borderWidth: StyleSheet.hairlineWidth, borderColor: theme.toolBorder }),
     },
     row: {
       flexDirection: 'row',
       alignItems: 'center',
-      gap: 6,
-    },
-    icon: {
-      fontSize: 13,
+      gap: 8,
     },
     title: {
-      fontSize: 12,
-      fontWeight: '600',
+      fontSize: 13,
+      fontWeight: '500',
       color: isError ? theme.danger : theme.textDim,
-    },
-    caret: {
-      fontSize: 11,
-      color: theme.textFaint,
     },
     body: {
       marginTop: 6,

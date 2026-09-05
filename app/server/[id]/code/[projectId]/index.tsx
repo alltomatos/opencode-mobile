@@ -1,8 +1,13 @@
-import { Link, router, useLocalSearchParams } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
+import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { Alert, Button, FlatList, Pressable, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { Alert, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { EmptyState } from '../../../../../src/components/ui/EmptyState';
+import { PrimaryButton } from '../../../../../src/components/ui/Button';
+import { Row } from '../../../../../src/components/ui/Row';
+import { Section } from '../../../../../src/components/ui/Section';
 import {
   createSession,
   deleteProjectFolder,
@@ -187,67 +192,100 @@ export default function ProjectSessionsScreen() {
     return <View style={styles.container} />;
   }
 
+  const filteredSessions = sessions.filter((s) =>
+    query.trim() ? (s.title || s.id).toLowerCase().includes(query.trim().toLowerCase()) : true
+  );
+
   return (
-    <View style={[styles.list, { paddingBottom: insets.bottom + 16 }]}>
-      <View style={styles.header}>
-        <View style={styles.headerRow}>
-          <View style={styles.headerTexts}>
-            <Text style={styles.title}>{projectName}</Text>
-            <Text style={styles.subtitle}>{directory}</Text>
-          </View>
-          <TouchableOpacity onPress={confirmDeleteProject} disabled={deletingProject} style={styles.deleteProjectButton}>
-            <Text style={styles.deleteProjectButtonText}>{deletingProject ? '…' : '🗑 Apagar projeto'}</Text>
-          </TouchableOpacity>
+    <View style={styles.container}>
+      <ScrollView contentContainerStyle={styles.scroll} contentInsetAdjustmentBehavior="automatic">
+        <View style={styles.header}>
+          <Text style={styles.title}>{projectName}</Text>
+          <Text style={styles.subtitle}>{directory}</Text>
         </View>
-        {hasMemory && (
-          <TouchableOpacity onPress={confirmForgetMemory} style={styles.memoryRow}>
-            <Text style={styles.memoryText}>🧠 Este projeto tem memória salva — toque para esquecer</Text>
-          </TouchableOpacity>
-        )}
-      </View>
 
-      {error && <Text style={styles.error}>{error}</Text>}
-
-      {(sessions?.length ?? 0) > 0 && (
-        <TextInput
-          style={styles.search}
-          placeholder="Buscar sessão…"
-          placeholderTextColor={theme.placeholder}
-          value={query}
-          onChangeText={setQuery}
-          autoCapitalize="none"
-        />
-      )}
-
-      <FlatList
-        data={(sessions ?? []).filter((s) =>
-          query.trim() ? (s.title || s.id).toLowerCase().includes(query.trim().toLowerCase()) : true
-        )}
-        keyExtractor={(item) => item.id}
-        ListEmptyComponent={
-          <Text style={styles.placeholder}>
-            {query.trim() ? 'Nenhuma sessão bate com a busca.' : 'Nenhuma sessão ainda.'}
-          </Text>
-        }
-        renderItem={({ item }) => (
-          <View style={styles.row}>
-            <Link href={`/server/${id}/code/${encodedProjectId}/session/${item.id}`} asChild>
-              <Pressable style={styles.rowLink}>
-                <Text style={styles.rowTitle}>{item.title || item.id}</Text>
-              </Pressable>
-            </Link>
-            <TouchableOpacity
-              onPress={() => confirmDeleteSession(item)}
-              disabled={deletingSessionID === item.id}
-              style={styles.rowDeleteButton}
-            >
-              <Text style={styles.rowDeleteText}>{deletingSessionID === item.id ? '…' : '🗑'}</Text>
-            </TouchableOpacity>
+        {error && (
+          <View style={styles.errorBanner}>
+            <Ionicons name="alert-circle" size={16} color={theme.danger} />
+            <Text style={styles.errorText}>{error}</Text>
           </View>
         )}
-      />
 
-      <Button title={creating ? 'Criando…' : '+ Nova sessão'} onPress={handleNewSession} disabled={creating} />
+        {sessions.length > 0 && (
+          <View style={styles.searchBar}>
+            <Ionicons name="search" size={16} color={theme.textFaint} />
+            <TextInput
+              style={styles.searchInput}
+              placeholder="Buscar sessão"
+              placeholderTextColor={theme.placeholder}
+              value={query}
+              onChangeText={setQuery}
+              autoCapitalize="none"
+            />
+          </View>
+        )}
+
+        {sessions.length === 0 ? (
+          <EmptyState
+            icon="chatbubbles-outline"
+            title="Nenhuma sessão ainda"
+            subtitle='Toque em "Nova sessão" abaixo pra começar a conversar com o agente.'
+          />
+        ) : filteredSessions.length === 0 ? (
+          <EmptyState icon="search" title="Nada encontrado" subtitle="Nenhuma sessão bate com essa busca." />
+        ) : (
+          <Section>
+            {filteredSessions.map((item, i) => (
+              <Row
+                key={item.id}
+                icon="chatbubble-ellipses-outline"
+                iconColor={theme.accent}
+                title={item.title || item.id}
+                onPress={() => router.push(`/server/${id}/code/${encodedProjectId}/session/${item.id}`)}
+                last={i === filteredSessions.length - 1}
+                accessory={
+                  deletingSessionID === item.id ? undefined : (
+                    <Pressable
+                      onPress={() => confirmDeleteSession(item)}
+                      hitSlop={8}
+                      style={styles.rowDeleteHit}
+                    >
+                      <Ionicons name="trash-outline" size={18} color={theme.textFaint} />
+                    </Pressable>
+                  )
+                }
+                loading={deletingSessionID === item.id}
+              />
+            ))}
+          </Section>
+        )}
+
+        <Section title="Gerenciar projeto">
+          {hasMemory && (
+            <Row
+              icon="sparkles-outline"
+              iconColor="#af52de"
+              title="Esquecer memória do projeto"
+              subtitle="O agente guardou observações específicas deste projeto"
+              onPress={confirmForgetMemory}
+            />
+          )}
+          <Row
+            icon="trash-outline"
+            iconColor={theme.danger}
+            title="Apagar projeto"
+            subtitle="Remove a pasta do disco e todo o histórico de sessões"
+            destructive
+            onPress={confirmDeleteProject}
+            loading={deletingProject}
+            last
+          />
+        </Section>
+      </ScrollView>
+
+      <View style={[styles.footer, { paddingBottom: insets.bottom + 12 }]}>
+        <PrimaryButton title={creating ? 'Criando…' : '+ Nova sessão'} onPress={handleNewSession} loading={creating} />
+      </View>
     </View>
   );
 }
@@ -256,97 +294,62 @@ function createStyles(theme: Theme) {
   return StyleSheet.create({
     container: {
       flex: 1,
-      alignItems: 'center',
-      justifyContent: 'center',
-      padding: 24,
       backgroundColor: theme.bg,
     },
-    list: {
-      flex: 1,
+    scroll: {
       padding: 16,
-      gap: 12,
-      backgroundColor: theme.bg,
+      gap: 20,
     },
     header: {
-      gap: 8,
-    },
-    headerRow: {
-      flexDirection: 'row',
-      alignItems: 'flex-start',
-      justifyContent: 'space-between',
-      gap: 8,
-    },
-    headerTexts: {
-      flex: 1,
-      gap: 4,
+      gap: 2,
+      paddingHorizontal: 4,
     },
     title: {
-      fontSize: 18,
-      fontWeight: '600',
+      fontSize: 22,
+      fontWeight: '700',
       color: theme.text,
     },
     subtitle: {
+      fontSize: 13,
       color: theme.textDim,
     },
-    deleteProjectButton: {
-      paddingHorizontal: 10,
-      paddingVertical: 6,
-      borderRadius: 8,
-      backgroundColor: theme.dangerBg,
-    },
-    deleteProjectButtonText: {
-      color: theme.danger,
-      fontSize: 12,
-      fontWeight: '700',
-    },
-    memoryRow: {
-      backgroundColor: theme.bgAlt,
-      borderRadius: 8,
-      paddingHorizontal: 10,
-      paddingVertical: 8,
-    },
-    memoryText: {
-      fontSize: 12,
-      color: theme.textDim,
-    },
-    error: {
-      color: theme.danger,
-    },
-    search: {
-      borderWidth: 1,
-      borderColor: theme.border,
-      borderRadius: 10,
-      paddingHorizontal: 12,
-      paddingVertical: 8,
-      fontSize: 14,
-      color: theme.text,
-    },
-    placeholder: {
-      textAlign: 'center',
-      color: theme.textFaint,
-      marginVertical: 24,
-    },
-    row: {
+    errorBanner: {
       flexDirection: 'row',
       alignItems: 'center',
-      borderBottomWidth: StyleSheet.hairlineWidth,
-      borderBottomColor: theme.border,
+      gap: 8,
+      padding: 10,
+      borderRadius: 10,
+      backgroundColor: theme.dangerBg,
     },
-    rowLink: {
+    errorText: {
       flex: 1,
-      paddingVertical: 12,
+      color: theme.danger,
+      fontSize: 13,
     },
-    rowTitle: {
+    searchBar: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+      backgroundColor: theme.bgAlt,
+      borderRadius: 10,
+      paddingHorizontal: 12,
+      height: 36,
+    },
+    searchInput: {
+      flex: 1,
       fontSize: 16,
-      fontWeight: '600',
       color: theme.text,
+      padding: 0,
     },
-    rowDeleteButton: {
-      paddingHorizontal: 10,
-      paddingVertical: 8,
+    rowDeleteHit: {
+      padding: 4,
     },
-    rowDeleteText: {
-      fontSize: 16,
+    footer: {
+      paddingHorizontal: 16,
+      paddingTop: 8,
+      borderTopWidth: StyleSheet.hairlineWidth,
+      borderTopColor: theme.border,
+      backgroundColor: theme.bg,
     },
   });
 }

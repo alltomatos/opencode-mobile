@@ -1,9 +1,11 @@
-import { Link, router, useLocalSearchParams } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { Button, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Alert, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { StatusDot } from '../../../src/components/StatusDot';
+import { Row } from '../../../src/components/ui/Row';
+import { Section } from '../../../src/components/ui/Section';
 import { listProjectFolders, ServerHealth } from '../../../src/lib/api';
 import {
   describeConnection,
@@ -31,8 +33,8 @@ function healthLabel(health: ServerHealth | undefined, connectionType: string): 
   return `Online · ${versionLabel} · ${connectionType}`;
 }
 
-// Servidores > [Code | Batuta] > Projetos > Sessões — este é o "hub"
-// do servidor pareado.
+// Servidores > [Code | Batuta | Configurações] — este é o "hub" do
+// servidor pareado.
 export default function ServerHubScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const insets = useSafeAreaInsets();
@@ -58,6 +60,21 @@ export default function ServerHubScreen() {
       .catch(() => {});
   }, [server, token]);
 
+  function confirmRemoveServer() {
+    if (!server) return;
+    Alert.alert('Remover servidor', `Isso só remove "${server.label}" da lista pareada — nada é apagado nele.`, [
+      { text: 'Cancelar', style: 'cancel' },
+      {
+        text: 'Remover',
+        style: 'destructive',
+        onPress: async () => {
+          await removeServer(server.id);
+          router.replace('/');
+        },
+      },
+    ]);
+  }
+
   if (server === undefined) {
     return <View style={styles.container} />;
   }
@@ -65,13 +82,17 @@ export default function ServerHubScreen() {
   if (server === null) {
     return (
       <View style={styles.container}>
-        <Text style={styles.subtitle}>Servidor não encontrado.</Text>
+        <Text style={styles.notFound}>Servidor não encontrado.</Text>
       </View>
     );
   }
 
   return (
-    <View style={[styles.container, { paddingBottom: insets.bottom + 16 }]}>
+    <ScrollView
+      style={styles.container}
+      contentContainerStyle={[styles.scroll, { paddingBottom: insets.bottom + 24 }]}
+      contentInsetAdjustmentBehavior="automatic"
+    >
       <View style={styles.header}>
         <View style={styles.titleRow}>
           <StatusDot health={health[server.id]} theme={theme} />
@@ -81,41 +102,37 @@ export default function ServerHubScreen() {
         <Text style={styles.subtitle}>{healthLabel(health[server.id], describeConnection(server.url))}</Text>
       </View>
 
-      <View style={styles.cards}>
-        <Link href={`/server/${id}/code`} asChild>
-          <Pressable style={styles.card}>
-            <Text style={styles.cardTitle}>Code</Text>
-            <Text style={styles.cardSubtitle}>
-              Projetos e sessões
-              {projectCount !== null
-                ? ` · ${projectCount} ${projectCount === 1 ? 'projeto' : 'projetos'}`
-                : ''}
-            </Text>
-          </Pressable>
-        </Link>
-        <Link href={`/server/${id}/batuta`} asChild>
-          <Pressable style={styles.card}>
-            <Text style={styles.cardTitle}>Batuta</Text>
-            <Text style={styles.cardSubtitle}>Orquestração multi-agente</Text>
-          </Pressable>
-        </Link>
-        <Link href={`/server/${id}/settings`} asChild>
-          <Pressable style={styles.card}>
-            <Text style={styles.cardTitle}>Configurações</Text>
-            <Text style={styles.cardSubtitle}>Tema, notificações, memória e mais</Text>
-          </Pressable>
-        </Link>
-      </View>
+      <Section>
+        <Row
+          icon="folder-outline"
+          iconColor="#5856d6"
+          title="Code"
+          subtitle={`Projetos e sessões${
+            projectCount !== null ? ` · ${projectCount} ${projectCount === 1 ? 'projeto' : 'projetos'}` : ''
+          }`}
+          onPress={() => router.push(`/server/${id}/code`)}
+        />
+        <Row
+          icon="git-network-outline"
+          iconColor="#ff9500"
+          title="Batuta"
+          subtitle="Orquestração multi-agente"
+          onPress={() => router.push(`/server/${id}/batuta`)}
+        />
+        <Row
+          icon="settings-outline"
+          iconColor={theme.textFaint}
+          title="Configurações"
+          subtitle="Tema, notificações, memória e mais"
+          onPress={() => router.push(`/server/${id}/settings`)}
+          last
+        />
+      </Section>
 
-      <Button
-        title="Remover servidor"
-        color={theme.danger}
-        onPress={async () => {
-          await removeServer(server.id);
-          router.replace('/');
-        }}
-      />
-    </View>
+      <Section>
+        <Row title="Remover servidor" destructive onPress={confirmRemoveServer} last />
+      </Section>
+    </ScrollView>
   );
 }
 
@@ -123,12 +140,20 @@ function createStyles(theme: Theme) {
   return StyleSheet.create({
     container: {
       flex: 1,
-      padding: 16,
-      gap: 16,
       backgroundColor: theme.bg,
+    },
+    scroll: {
+      padding: 16,
+      gap: 20,
+    },
+    notFound: {
+      padding: 16,
+      color: theme.textDim,
     },
     header: {
       gap: 4,
+      paddingHorizontal: 4,
+      paddingBottom: 4,
     },
     titleRow: {
       flexDirection: 'row',
@@ -136,32 +161,13 @@ function createStyles(theme: Theme) {
       gap: 8,
     },
     title: {
-      fontSize: 18,
-      fontWeight: '600',
-      color: theme.text,
-    },
-    subtitle: {
-      color: theme.textDim,
-    },
-    cards: {
-      flex: 1,
-      gap: 12,
-    },
-    card: {
-      padding: 20,
-      borderRadius: 14,
-      backgroundColor: theme.surface,
-      borderWidth: 1,
-      borderColor: theme.border,
-    },
-    cardTitle: {
-      fontSize: 20,
+      fontSize: 22,
       fontWeight: '700',
       color: theme.text,
     },
-    cardSubtitle: {
+    subtitle: {
+      fontSize: 13,
       color: theme.textDim,
-      marginTop: 4,
     },
   });
 }

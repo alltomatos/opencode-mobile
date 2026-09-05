@@ -2,55 +2,61 @@ import { useColorScheme } from 'react-native';
 
 import { useSettings } from './settings';
 
-// Segue o tema do sistema em tempo real (useColorScheme já reage a
-// troca ao vivo, sem precisar reiniciar o app). Nada de hex hardcoded
-// nas telas — sempre consumir daqui.
+// Paleta baseada nas cores semânticas do iOS/Apple HIG (systemBlue,
+// systemGroupedBackground, label/secondaryLabel, separator etc.) —
+// pedido explícito do usuário ("redesenhar com inspiração Apple").
+// Mantém os mesmos nomes de token de antes (bg/surface/text/...) pra
+// não precisar reescrever toda referência nas telas — só os valores
+// mudaram, então a repaginação já se propaga sozinha pra tudo que usa
+// useTheme(). `bg` aqui é o "systemGroupedBackground" (o cinza por
+// trás das listas agrupadas), `surface` é o branco/cinza-escuro dos
+// cards — esse par é a base do padrão de "grouped table view" do iOS.
 const light = {
-  bg: '#ffffff',
-  bgAlt: '#f4f5f3',
+  bg: '#f2f2f7',
+  bgAlt: '#e5e5ea',
   surface: '#ffffff',
-  border: '#e5e7eb',
-  text: '#111827',
-  textDim: '#6b7280',
-  textFaint: '#9ca3af',
-  accent: '#2563eb',
+  border: '#c6c6c8',
+  text: '#000000',
+  textDim: '#6c6c70',
+  textFaint: '#aeaeb2',
+  accent: '#007aff',
   accentText: '#ffffff',
-  accentDim: '#93c5fd',
-  danger: '#dc2626',
-  dangerBg: '#fee2e2',
-  warnBg: '#fffbeb',
-  warnBorder: '#fde68a',
-  warnText: '#92400e',
-  bubbleAssistant: '#f3f4f6',
-  placeholder: '#9ca3af',
-  toolBg: '#f7f7f8',
-  toolBorder: '#e5e7eb',
-  toolShimmer: '#c7cad1',
-  success: '#16a34a',
+  accentDim: '#b3d7ff',
+  danger: '#ff3b30',
+  dangerBg: '#ffe5e3',
+  warnBg: '#fff7da',
+  warnBorder: '#ffe59b',
+  warnText: '#8a6d00',
+  bubbleAssistant: '#e9e9eb',
+  placeholder: '#c7c7cc',
+  toolBg: '#ffffff',
+  toolBorder: '#e5e5ea',
+  toolShimmer: '#d1d1d6',
+  success: '#34c759',
 };
 
 const dark = {
-  bg: '#0b0f14',
-  bgAlt: '#11161c',
-  surface: '#161c23',
-  border: '#262e37',
-  text: '#eef2f6',
-  textDim: '#9aa5b1',
-  textFaint: '#6b7684',
-  accent: '#3b82f6',
+  bg: '#000000',
+  bgAlt: '#1c1c1e',
+  surface: '#1c1c1e',
+  border: '#38383a',
+  text: '#ffffff',
+  textDim: '#98989f',
+  textFaint: '#636366',
+  accent: '#0a84ff',
   accentText: '#ffffff',
-  accentDim: '#1e3a5f',
-  danger: '#f87171',
-  dangerBg: '#3a1a1a',
-  warnBg: '#2a2410',
-  warnBorder: '#4a3d14',
-  warnText: '#fbbf24',
-  bubbleAssistant: '#1f262e',
-  placeholder: '#6b7684',
-  toolBg: '#161c23',
-  toolBorder: '#262e37',
-  toolShimmer: '#3a4451',
-  success: '#22c55e',
+  accentDim: '#0a3d66',
+  danger: '#ff453a',
+  dangerBg: '#3a1614',
+  warnBg: '#332b0a',
+  warnBorder: '#5c4b0a',
+  warnText: '#ffd335',
+  bubbleAssistant: '#262629',
+  placeholder: '#48484a',
+  toolBg: '#1c1c1e',
+  toolBorder: '#38383a',
+  toolShimmer: '#3a3a3c',
+  success: '#30d158',
 };
 
 export type Theme = typeof light;

@@ -1,9 +1,14 @@
-import { Link, useFocusEffect } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
+import { Link, router, useFocusEffect } from 'expo-router';
 import { useCallback, useState } from 'react';
-import { FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
+import { ScrollView, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { StatusDot } from '../src/components/StatusDot';
+import { PrimaryButton } from '../src/components/ui/Button';
+import { EmptyState } from '../src/components/ui/EmptyState';
+import { Row } from '../src/components/ui/Row';
+import { Section } from '../src/components/ui/Section';
 import { describeConnection, listServers, ServerConnection } from '../src/lib/servers';
 import { useServerHealth } from '../src/lib/serverHealth';
 import { Theme, useTheme } from '../src/lib/theme';
@@ -27,39 +32,46 @@ export default function ServerListScreen() {
 
   if (servers.length === 0) {
     return (
-      <View style={styles.container}>
-        <Text style={styles.title}>Nenhum servidor pareado</Text>
-        <Text style={styles.subtitle}>
-          Escaneie o QR code em Configurações → Servidores no app desktop para começar.
-        </Text>
-        <Link href="/pair" style={styles.link}>
-          Parear servidor
-        </Link>
+      <View style={[styles.container, { paddingBottom: insets.bottom + 16 }]}>
+        <EmptyState
+          icon="server-outline"
+          title="Nenhum servidor pareado"
+          subtitle="Escaneie o QR code em Configurações → Servidores no app desktop pra começar."
+        />
+        <View style={styles.emptyCta}>
+          <PrimaryButton title="Parear servidor" onPress={() => router.push('/pair')} />
+        </View>
       </View>
     );
   }
 
   return (
-    <View style={styles.list}>
-      <FlatList
-        data={servers}
-        keyExtractor={(item) => item.id}
-        renderItem={({ item }) => (
-          <Link href={`/server/${item.id}`} asChild>
-            <Pressable style={styles.row}>
-              <View style={styles.rowHeader}>
-                <StatusDot health={health[item.id]} theme={theme} />
-                <Text style={styles.rowLabel}>{item.label}</Text>
-                <Text style={styles.rowConnectionType}>{describeConnection(item.url)}</Text>
-              </View>
-              <Text style={styles.rowUrl}>{item.url}</Text>
-            </Pressable>
-          </Link>
-        )}
-      />
-      <Link href="/pair" style={[styles.addLink, { paddingBottom: insets.bottom + 16 }]}>
-        + Parear novo servidor
-      </Link>
+    <View style={styles.container}>
+      <ScrollView contentContainerStyle={styles.scroll} contentInsetAdjustmentBehavior="automatic">
+        <Section title={servers.length === 1 ? '1 servidor' : `${servers.length} servidores`}>
+          {servers.map((item, i) => (
+            <Row
+              key={item.id}
+              icon="server-outline"
+              iconColor={theme.accent}
+              title={item.label}
+              subtitle={`${item.url} · ${describeConnection(item.url)}`}
+              onPress={() => router.push(`/server/${item.id}`)}
+              accessory={
+                <View style={styles.rowAccessory}>
+                  <StatusDot health={health[item.id]} theme={theme} />
+                  <Ionicons name="chevron-forward" size={18} color={theme.textFaint} />
+                </View>
+              }
+              last={i === servers.length - 1}
+            />
+          ))}
+        </Section>
+      </ScrollView>
+
+      <View style={[styles.footer, { paddingBottom: insets.bottom + 12 }]}>
+        <PrimaryButton title="+ Parear novo servidor" onPress={() => router.push('/pair')} />
+      </View>
     </View>
   );
 }
@@ -68,67 +80,26 @@ function createStyles(theme: Theme) {
   return StyleSheet.create({
     container: {
       flex: 1,
-      alignItems: 'center',
-      justifyContent: 'center',
-      padding: 24,
-      gap: 12,
       backgroundColor: theme.bg,
     },
-    title: {
-      fontSize: 18,
-      fontWeight: '600',
-      color: theme.text,
+    scroll: {
+      paddingTop: 16,
+      paddingBottom: 8,
     },
-    subtitle: {
-      textAlign: 'center',
-      color: theme.textDim,
+    emptyCta: {
+      paddingHorizontal: 32,
     },
-    link: {
-      marginTop: 12,
-      fontSize: 16,
-      fontWeight: '600',
-      color: theme.accent,
-    },
-    list: {
-      flex: 1,
-      backgroundColor: theme.bg,
-    },
-    row: {
-      padding: 16,
-      borderBottomWidth: StyleSheet.hairlineWidth,
-      borderBottomColor: theme.border,
-    },
-    rowHeader: {
+    rowAccessory: {
       flexDirection: 'row',
       alignItems: 'center',
       gap: 8,
     },
-    rowLabel: {
-      fontSize: 16,
-      fontWeight: '600',
-      color: theme.text,
-    },
-    rowConnectionType: {
-      fontSize: 11,
-      fontWeight: '700',
-      color: theme.textFaint,
-      textTransform: 'uppercase',
-      backgroundColor: theme.bgAlt,
-      borderRadius: 6,
-      paddingHorizontal: 6,
-      paddingVertical: 2,
-    },
-    rowUrl: {
-      color: theme.textDim,
-      marginTop: 2,
-      marginLeft: 17,
-    },
-    addLink: {
-      textAlign: 'center',
-      padding: 16,
-      fontSize: 16,
-      fontWeight: '600',
-      color: theme.accent,
+    footer: {
+      paddingHorizontal: 16,
+      paddingTop: 8,
+      borderTopWidth: StyleSheet.hairlineWidth,
+      borderTopColor: theme.border,
+      backgroundColor: theme.bg,
     },
   });
 }

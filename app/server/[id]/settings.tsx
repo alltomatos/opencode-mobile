@@ -1,9 +1,11 @@
 import Constants from 'expo-constants';
 import { useLocalSearchParams } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { Platform, StyleSheet, Switch, Text, View } from 'react-native';
+import { Platform, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { Row } from '../../../src/components/ui/Row';
+import { Section } from '../../../src/components/ui/Section';
 import { getMemoryConfig, setMemoryConfig } from '../../../src/lib/api';
 import {
   getNotificationPermissionStatus,
@@ -84,150 +86,141 @@ export default function SettingsScreen() {
   }
 
   return (
-    <View style={[styles.container, { paddingBottom: insets.bottom + 24 }]}>
-      <Text style={styles.sectionLabel}>Aparência</Text>
-      <View style={styles.card}>
-        <Text style={styles.rowTitle}>Tema</Text>
-        <View style={styles.segmented}>
-          {THEME_OPTIONS.map((opt) => {
-            const active = settings.themeOverride === opt.value;
-            return (
-              <View
-                key={opt.value}
-                onTouchEnd={() => update({ themeOverride: opt.value })}
-                style={[styles.segment, active && styles.segmentActive]}
-              >
-                <Text style={[styles.segmentText, active && styles.segmentTextActive]}>{opt.label}</Text>
-              </View>
-            );
-          })}
+    <ScrollView
+      style={styles.container}
+      contentContainerStyle={[styles.scroll, { paddingBottom: insets.bottom + 24 }]}
+      contentInsetAdjustmentBehavior="automatic"
+    >
+      <Section title="Aparência">
+        <View style={styles.segmentedRow}>
+          <View style={styles.segmented}>
+            {THEME_OPTIONS.map((opt) => {
+              const active = settings.themeOverride === opt.value;
+              return (
+                <View
+                  key={opt.value}
+                  onTouchEnd={() => update({ themeOverride: opt.value })}
+                  style={[styles.segment, active && styles.segmentActive]}
+                >
+                  <Text style={[styles.segmentText, active && styles.segmentTextActive]}>{opt.label}</Text>
+                </View>
+              );
+            })}
+          </View>
         </View>
-      </View>
+      </Section>
 
-      <Text style={styles.sectionLabel}>Conversa</Text>
-      <View style={styles.card}>
-        <View style={styles.switchRow}>
-          <View style={styles.switchLabel}>
-            <Text style={styles.rowTitle}>Mostrar resumo do "pensamento"</Text>
-            <Text style={styles.rowSubtitle}>
-              Exibe o texto de raciocínio do modelo como um card, quando o modelo emitir. Desligado por
-              padrão — igual ao app desktop.
-            </Text>
-          </View>
-          <Switch
-            value={settings.showReasoningSummaries}
-            onValueChange={(value) => update({ showReasoningSummaries: value })}
-            trackColor={{ true: theme.accent, false: theme.border }}
-          />
-        </View>
-        <View style={styles.divider} />
-        <View style={styles.switchRow}>
-          <View style={styles.switchLabel}>
-            <Text style={styles.rowTitle}>Expandir tools automaticamente</Text>
-            <Text style={styles.rowSubtitle}>
-              Cards de shell/edição já aparecem abertos, sem precisar tocar pra ver o resultado.
-            </Text>
-          </View>
-          <Switch
-            value={settings.toolPartsExpanded}
-            onValueChange={(value) => update({ toolPartsExpanded: value })}
-            trackColor={{ true: theme.accent, false: theme.border }}
-          />
-        </View>
-      </View>
+      <Section title="Conversa">
+        <Row
+          title={'Mostrar resumo do "pensamento"'}
+          subtitle="Exibe o raciocínio do modelo como um card, quando ele emitir. Desligado por padrão, igual ao desktop."
+          accessory={
+            <Switch
+              value={settings.showReasoningSummaries}
+              onValueChange={(value) => update({ showReasoningSummaries: value })}
+              trackColor={{ true: theme.accent, false: theme.border }}
+            />
+          }
+        />
+        <Row
+          title="Expandir tools automaticamente"
+          subtitle="Cards de shell/edição já aparecem abertos, sem precisar tocar."
+          accessory={
+            <Switch
+              value={settings.toolPartsExpanded}
+              onValueChange={(value) => update({ toolPartsExpanded: value })}
+              trackColor={{ true: theme.accent, false: theme.border }}
+            />
+          }
+          last
+        />
+      </Section>
 
       {memoryEnabled !== null && memoryEnabled !== undefined && (
-        <>
-          <Text style={styles.sectionLabel}>Memória</Text>
-          <View style={styles.card}>
-            <View style={styles.switchRow}>
-              <View style={styles.switchLabel}>
-                <Text style={styles.rowTitle}>Memória neste servidor</Text>
-                <Text style={styles.rowSubtitle}>
-                  O agente guarda observações entre conversas — configuração salva no servidor
-                  "{server?.label}", não no app. Cada projeto também tem a própria memória (gerenciável na
-                  tela de sessões dele).
-                </Text>
-              </View>
+        <Section title="Memória" footer={`Configuração salva no servidor "${server?.label}", não no app. Cada projeto também tem a própria memória (gerenciável na tela de sessões dele).`}>
+          <Row
+            title="Memória neste servidor"
+            accessory={
               <Switch
                 value={memoryEnabled}
                 onValueChange={handleToggleServerMemory}
                 trackColor={{ true: theme.accent, false: theme.border }}
               />
-            </View>
-          </View>
-        </>
+            }
+            last
+          />
+        </Section>
       )}
 
-      <Text style={styles.sectionLabel}>Notificações</Text>
-      <View style={styles.card}>
+      <Section
+        title="Notificações"
+        footer={
+          notificationsSupported
+            ? Platform.OS === 'android'
+              ? 'Notificações locais — disparadas pelo próprio app enquanto ele está aberto ou recém-minimizado. Não chegam com o app fechado pelo sistema (isso exigiria um build próprio, fora do Expo Go).'
+              : 'Notificações locais — disparadas pelo próprio app enquanto ele está aberto ou recém-minimizado.'
+            : undefined
+        }
+      >
         {!notificationsSupported ? (
-          <Text style={styles.warnText}>
-            Notificações (mesmo locais) não funcionam no Android dentro do Expo Go — a partir do SDK 53 a
-            Expo removeu esse suporte de lá; só um build próprio do app (dev build/EAS) habilita isso.
-            Essa seção some assim que o app rodar fora do Expo Go.
-          </Text>
+          <View style={styles.warnBox}>
+            <Text style={styles.warnText}>
+              Notificações (mesmo locais) não funcionam no Android dentro do Expo Go — a partir do SDK 53 a
+              Expo removeu esse suporte de lá; só um build próprio do app (dev build/EAS) habilita isso.
+            </Text>
+          </View>
         ) : (
           <>
             {permissionStatus === 'denied' && (
-              <Text style={styles.warnText}>
-                Permissão de notificação negada pelo sistema. Ative em Ajustes do Android/iOS pra essas
-                opções funcionarem.
-              </Text>
+              <View style={styles.warnBox}>
+                <Text style={styles.warnText}>
+                  Permissão de notificação negada pelo sistema. Ative em Ajustes do Android/iOS.
+                </Text>
+              </View>
             )}
-            {NOTIFICATION_CATEGORIES.map((cat, i) => (
-              <View key={cat.key}>
-                {i > 0 && <View style={styles.divider} />}
-                <View style={styles.switchRow}>
-                  <View style={styles.switchLabel}>
-                    <Text style={styles.rowTitle}>{cat.label}</Text>
-                    <Text style={styles.rowSubtitle}>{cat.hint}</Text>
-                  </View>
+            {NOTIFICATION_CATEGORIES.map((cat) => (
+              <Row
+                key={cat.key}
+                title={cat.label}
+                subtitle={cat.hint}
+                accessory={
                   <Switch
                     value={settings.notifications[cat.key]}
                     onValueChange={(value) => handleToggleCategory(cat.key, value)}
                     trackColor={{ true: theme.accent, false: theme.border }}
                   />
-                </View>
-              </View>
+                }
+              />
             ))}
-            <View style={styles.divider} />
-            <View style={styles.switchRow}>
-              <Text style={[styles.rowTitle, styles.switchLabel]}>Som</Text>
-              <Switch
-                value={settings.notificationSound}
-                onValueChange={(value) => update({ notificationSound: value })}
-                trackColor={{ true: theme.accent, false: theme.border }}
-              />
-            </View>
-            <View style={styles.divider} />
-            <View style={styles.switchRow}>
-              <Text style={[styles.rowTitle, styles.switchLabel]}>Vibração</Text>
-              <Switch
-                value={settings.notificationVibration}
-                onValueChange={(value) => update({ notificationVibration: value })}
-                trackColor={{ true: theme.accent, false: theme.border }}
-              />
-            </View>
+            <Row
+              title="Som"
+              accessory={
+                <Switch
+                  value={settings.notificationSound}
+                  onValueChange={(value) => update({ notificationSound: value })}
+                  trackColor={{ true: theme.accent, false: theme.border }}
+                />
+              }
+            />
+            <Row
+              title="Vibração"
+              accessory={
+                <Switch
+                  value={settings.notificationVibration}
+                  onValueChange={(value) => update({ notificationVibration: value })}
+                  trackColor={{ true: theme.accent, false: theme.border }}
+                />
+              }
+              last
+            />
           </>
         )}
-      </View>
-      {notificationsSupported && (
-        <Text style={styles.hintBelow}>
-          {Platform.OS === 'android'
-            ? 'Notificações locais — disparadas pelo próprio app enquanto ele está aberto ou recém-minimizado. Não chegam com o app fechado pelo sistema (isso exigiria um build próprio, fora do Expo Go).'
-            : 'Notificações locais — disparadas pelo próprio app enquanto ele está aberto ou recém-minimizado.'}
-        </Text>
-      )}
+      </Section>
 
-      <Text style={styles.sectionLabel}>Sobre</Text>
-      <View style={styles.card}>
-        <View style={styles.aboutRow}>
-          <Text style={styles.rowTitle}>Versão</Text>
-          <Text style={styles.rowSubtitle}>{Constants.expoConfig?.version ?? '—'}</Text>
-        </View>
-      </View>
-    </View>
+      <Section title="Sobre">
+        <Row title="Versão" accessory={<Text style={styles.versionText}>{Constants.expoConfig?.version ?? '—'}</Text>} last />
+      </Section>
+    </ScrollView>
   );
 }
 
@@ -235,51 +228,30 @@ function createStyles(theme: Theme) {
   return StyleSheet.create({
     container: {
       flex: 1,
-      padding: 16,
-      gap: 20,
       backgroundColor: theme.bg,
     },
-    sectionLabel: {
-      fontSize: 12,
-      fontWeight: '700',
-      color: theme.textFaint,
-      textTransform: 'uppercase',
-      marginBottom: -8,
+    scroll: {
+      padding: 16,
+      gap: 20,
     },
-    card: {
-      backgroundColor: theme.surface,
-      borderRadius: 14,
-      borderWidth: 1,
-      borderColor: theme.border,
-      padding: 14,
-      gap: 14,
-    },
-    rowTitle: {
-      fontSize: 15,
-      fontWeight: '600',
-      color: theme.text,
-    },
-    rowSubtitle: {
-      fontSize: 12,
-      color: theme.textDim,
-      marginTop: 4,
-      lineHeight: 17,
+    segmentedRow: {
+      padding: 12,
     },
     segmented: {
       flexDirection: 'row',
       backgroundColor: theme.bgAlt,
-      borderRadius: 10,
-      padding: 3,
-      gap: 3,
+      borderRadius: 9,
+      padding: 2,
+      gap: 2,
     },
     segment: {
       flex: 1,
-      paddingVertical: 8,
-      borderRadius: 8,
+      paddingVertical: 7,
+      borderRadius: 7,
       alignItems: 'center',
     },
     segmentActive: {
-      backgroundColor: theme.accent,
+      backgroundColor: theme.surface,
     },
     segmentText: {
       fontSize: 13,
@@ -287,39 +259,19 @@ function createStyles(theme: Theme) {
       color: theme.textDim,
     },
     segmentTextActive: {
-      color: theme.accentText,
+      color: theme.accent,
     },
-    switchRow: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 12,
-    },
-    switchLabel: {
-      flex: 1,
-    },
-    divider: {
-      height: StyleSheet.hairlineWidth,
-      backgroundColor: theme.border,
+    warnBox: {
+      padding: 12,
     },
     warnText: {
-      fontSize: 12,
+      fontSize: 13,
       color: theme.warnText,
-      backgroundColor: theme.warnBg,
-      borderWidth: 1,
-      borderColor: theme.warnBorder,
-      borderRadius: 8,
-      padding: 8,
+      lineHeight: 18,
     },
-    hintBelow: {
-      fontSize: 11,
-      color: theme.textFaint,
-      marginTop: -12,
-      lineHeight: 15,
-    },
-    aboutRow: {
-      flexDirection: 'row',
-      justifyContent: 'space-between',
-      alignItems: 'center',
+    versionText: {
+      fontSize: 16,
+      color: theme.textDim,
     },
   });
 }
