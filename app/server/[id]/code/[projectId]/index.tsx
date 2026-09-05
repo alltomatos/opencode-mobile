@@ -15,6 +15,14 @@ export default function ProjectSessionsScreen() {
   // servidor (frágil e não cobre pastas sem git).
   const directory = decodeURIComponent(projectId);
   const projectName = directory.split('/').pop() || directory;
+  // Nunca reusar `projectId` bruto pra montar uma URL nova — não dá
+  // pra saber se o React Navigation vai devolver o valor ainda
+  // codificado ou já decodificado (não documentado), e `directory`
+  // tem barras de verdade. Sempre recodificar a partir da fonte da
+  // verdade (`directory`) evita o bug de "Unmatched Route" que
+  // apareceu ao clicar Nova sessão com um projectId parcialmente
+  // decodificado virando múltiplos segmentos de rota.
+  const encodedProjectId = encodeURIComponent(directory);
   const insets = useSafeAreaInsets();
   const theme = useTheme();
   const styles = createStyles(theme);
@@ -76,7 +84,7 @@ export default function ProjectSessionsScreen() {
     setError(null);
     try {
       const session = await createSession(server, token, directory);
-      router.push(`/server/${id}/code/${projectId}/session/${session.id}`);
+      router.push(`/server/${id}/code/${encodedProjectId}/session/${session.id}`);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Falha ao criar sessão.');
     } finally {
@@ -119,7 +127,7 @@ export default function ProjectSessionsScreen() {
           </Text>
         }
         renderItem={({ item }) => (
-          <Link href={`/server/${id}/code/${projectId}/session/${item.id}`} asChild>
+          <Link href={`/server/${id}/code/${encodedProjectId}/session/${item.id}`} asChild>
             <Pressable style={styles.row}>
               <Text style={styles.rowTitle}>{item.title || item.id}</Text>
             </Pressable>

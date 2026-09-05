@@ -356,7 +356,14 @@ export default function SessionChatScreen() {
       {children.length > 0 && (
         <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.childrenRow}>
           {children.map((child) => (
-            <Link key={child.id} href={`/server/${id}/code/${projectId}/session/${child.id}`} asChild>
+            <Link
+              key={child.id}
+              // Ver comentário em code/[projectId]/index.tsx — nunca
+              // reusar `projectId` bruto pra montar uma URL nova,
+              // sempre decodificar+recodificar.
+              href={`/server/${id}/code/${encodeURIComponent(decodeURIComponent(projectId))}/session/${child.id}`}
+              asChild
+            >
               <TouchableOpacity style={styles.childChip}>
                 <Text style={styles.childChipLabel} numberOfLines={1}>
                   {child.title || child.id}
