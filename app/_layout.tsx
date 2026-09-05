@@ -8,10 +8,10 @@ import { syncNotificationChannels } from '../src/lib/notifications';
 import { SettingsContext, useSettings, useSettingsState } from '../src/lib/settings';
 import { useTheme } from '../src/lib/theme';
 
-// A barra de abas (Servidores/Configurações) só existe no nível raiz —
-// assim que o usuário entra num servidor específico, a navegação vira
-// uma pilha cheia (sem tab bar), padrão comum em apps mobile pra dar
-// mais espaço de tela ao conteúdo de trabalho (chat, sessões, etc.).
+// Sem tab bar: o app abre direto na lista de servidores, e
+// "Configurações" é uma tela por servidor (acessada de dentro do hub
+// dele, junto de Code/Batuta) — não uma aba global do app. Pedido
+// explícito do usuário depois de testar a versão com abas.
 function RootNavigator() {
   const theme = useTheme();
   const scheme = useColorScheme();
@@ -36,9 +36,10 @@ function RootNavigator() {
           contentStyle: { backgroundColor: theme.bg },
         }}
       >
-        <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+        <Stack.Screen name="index" options={{ title: 'Servidores' }} />
         <Stack.Screen name="pair" options={{ title: 'Parear servidor', presentation: 'modal' }} />
         <Stack.Screen name="server/[id]/index" options={{ title: 'Servidor' }} />
+        <Stack.Screen name="server/[id]/settings" options={{ title: 'Configurações' }} />
         <Stack.Screen name="server/[id]/code/index" options={{ title: 'Projetos' }} />
         <Stack.Screen name="server/[id]/code/add" options={{ title: 'Adicionar projeto', presentation: 'modal' }} />
         <Stack.Screen name="server/[id]/code/[projectId]/index" options={{ title: 'Sessões' }} />

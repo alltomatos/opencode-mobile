@@ -1,17 +1,18 @@
 import Constants from 'expo-constants';
+import { useLocalSearchParams } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { Platform, StyleSheet, Switch, Text, TouchableOpacity, View } from 'react-native';
+import { Platform, StyleSheet, Switch, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { getMemoryConfig, setMemoryConfig } from '../../src/lib/api';
+import { getMemoryConfig, setMemoryConfig } from '../../../src/lib/api';
 import {
   getNotificationPermissionStatus,
   isNotificationSupportAvailable,
   requestNotificationPermission,
-} from '../../src/lib/notifications';
-import { getServerToken, listServers, ServerConnection } from '../../src/lib/servers';
-import { NotificationCategory, ThemeOverride, useSettings } from '../../src/lib/settings';
-import { Theme, useTheme } from '../../src/lib/theme';
+} from '../../../src/lib/notifications';
+import { getServerToken, listServers, ServerConnection } from '../../../src/lib/servers';
+import { NotificationCategory, ThemeOverride, useSettings } from '../../../src/lib/settings';
+import { Theme, useTheme } from '../../../src/lib/theme';
 
 const THEME_OPTIONS: { value: ThemeOverride; label: string }[] = [
   { value: 'system', label: 'Sistema' },
@@ -26,17 +27,20 @@ const NOTIFICATION_CATEGORIES: { key: NotificationCategory; label: string; hint:
 ];
 
 export default function SettingsScreen() {
+  const { id } = useLocalSearchParams<{ id: string }>();
   const insets = useSafeAreaInsets();
   const theme = useTheme();
   const styles = createStyles(theme);
   const { settings, update } = useSettings();
   const [permissionStatus, setPermissionStatus] = useState<'granted' | 'denied' | 'undetermined' | null>(null);
   const notificationsSupported = isNotificationSupportAvailable();
-  const [servers, setServers] = useState<ServerConnection[]>([]);
-  // `null` = ainda carregando; ausente do mapa depois de carregar =
-  // servidor não respondeu GET /memory (fica de fora da lista, sem
-  // toggle quebrado mostrando estado errado).
-  const [serverMemory, setServerMemory] = useState<Record<string, boolean>>({});
+  const [server, setServer] = useState<ServerConnection | null>(null);
+  const [token, setToken] = useState<string | null>(null);
+  // `null` = ainda não carregou; depois disso, `undefined` explícito
+  // significa que o GET /memory falhou (servidor fora do ar, rota não
+  // implementada nessa build, etc.) — nesse caso escondemos o toggle
+  // em vez de mostrar um estado que pode estar errado.
+  const [memoryEnabled, setMemoryEnabled] = useState<boolean | null | undefined>(null);
 
   useEffect(() => {
     if (!notificationsSupported) return;
@@ -45,25 +49,25 @@ export default function SettingsScreen() {
 
   useEffect(() => {
     listServers().then(async (list) => {
-      setServers(list);
-      for (const server of list) {
-        const token = await getServerToken(server.id);
-        if (!token) continue;
-        getMemoryConfig(server, token)
-          .then((config) => setServerMemory((prev) => ({ ...prev, [server.id]: config.enabled !== false })))
-          .catch(() => {});
-      }
+      const found = list.find((s) => s.id === id) ?? null;
+      setServer(found);
+      if (!found) return;
+      const t = await getServerToken(found.id);
+      setToken(t);
+      if (!t) return;
+      getMemoryConfig(found, t)
+        .then((config) => setMemoryEnabled(config.enabled !== false))
+        .catch(() => setMemoryEnabled(undefined));
     });
-  }, []);
+  }, [id]);
 
-  async function handleToggleServerMemory(server: ServerConnection, value: boolean) {
-    const token = await getServerToken(server.id);
-    if (!token) return;
-    setServerMemory((prev) => ({ ...prev, [server.id]: value }));
+  async function handleToggleServerMemory(value: boolean) {
+    if (!server || !token) return;
+    setMemoryEnabled(value);
     try {
       await setMemoryConfig(server, token, { enabled: value });
     } catch {
-      setServerMemory((prev) => ({ ...prev, [server.id]: !value }));
+      setMemoryEnabled(!value);
     }
   }
 
@@ -132,33 +136,25 @@ export default function SettingsScreen() {
         </View>
       </View>
 
-      {servers.length > 0 && (
+      {memoryEnabled !== null && memoryEnabled !== undefined && (
         <>
           <Text style={styles.sectionLabel}>Memória</Text>
           <View style={styles.card}>
-            <Text style={styles.rowSubtitle}>
-              O agente guarda observações entre conversas — é uma configuração salva em cada servidor, não
-              no app. Cada projeto também tem a própria memória (gerenciável na tela de sessões dele).
-            </Text>
-            {servers.map((server) => (
-              <View key={server.id}>
-                <View style={styles.divider} />
-                <View style={styles.switchRow}>
-                  <Text style={[styles.rowTitle, styles.switchLabel]} numberOfLines={1}>
-                    {server.label}
-                  </Text>
-                  {serverMemory[server.id] === undefined ? (
-                    <Text style={styles.rowSubtitle}>—</Text>
-                  ) : (
-                    <Switch
-                      value={serverMemory[server.id]}
-                      onValueChange={(value) => handleToggleServerMemory(server, value)}
-                      trackColor={{ true: theme.accent, false: theme.border }}
-                    />
-                  )}
-                </View>
+            <View style={styles.switchRow}>
+              <View style={styles.switchLabel}>
+                <Text style={styles.rowTitle}>Memória neste servidor</Text>
+                <Text style={styles.rowSubtitle}>
+                  O agente guarda observações entre conversas — configuração salva no servidor
+                  "{server?.label}", não no app. Cada projeto também tem a própria memória (gerenciável na
+                  tela de sessões dele).
+                </Text>
               </View>
-            ))}
+              <Switch
+                value={memoryEnabled}
+                onValueChange={handleToggleServerMemory}
+                trackColor={{ true: theme.accent, false: theme.border }}
+              />
+            </View>
           </View>
         </>
       )}

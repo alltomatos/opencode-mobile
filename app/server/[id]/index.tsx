@@ -99,6 +99,12 @@ export default function ServerHubScreen() {
             <Text style={styles.cardSubtitle}>Orquestração multi-agente</Text>
           </Pressable>
         </Link>
+        <Link href={`/server/${id}/settings`} asChild>
+          <Pressable style={styles.card}>
+            <Text style={styles.cardTitle}>Configurações</Text>
+            <Text style={styles.cardSubtitle}>Tema, notificações, memória e mais</Text>
+          </Pressable>
+        </Link>
       </View>
 
       <Button
