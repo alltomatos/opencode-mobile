@@ -547,7 +547,7 @@ export default function SessionChatScreen() {
             <TouchableOpacity
               key={c.name}
               style={styles.suggestionRow}
-              onPress={() => runSelectedCommand(c.name, '')}
+              onPress={() => setDraft(`/${c.name} `)}
             >
               <Text style={styles.suggestionName}>/{c.name}</Text>
               {c.description && (
