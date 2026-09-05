@@ -4,9 +4,22 @@ import { Button, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { StatusDot } from '../../../src/components/StatusDot';
+import { ServerHealth } from '../../../src/lib/api';
 import { getServerToken, listServers, removeServer, ServerConnection } from '../../../src/lib/servers';
 import { useServerHealth } from '../../../src/lib/serverHealth';
 import { Theme, useTheme } from '../../../src/lib/theme';
+
+// `version` do servidor às vezes é literalmente a string "local"
+// (build de desenvolvimento, sem número de versão de verdade) — visto
+// ao vivo em GET /global/health. Mostrar "v" + isso vira "vlocal",
+// confuso. Só prefixa "v" quando parece uma versão de verdade
+// (começa com dígito); senão mostra o valor puro entre parênteses.
+function healthLabel(health: ServerHealth | undefined): string {
+  if (health === undefined) return 'Verificando…';
+  if (!health.healthy) return 'Offline';
+  const { version } = health;
+  return /^\d/.test(version) ? `Online · v${version}` : `Online (${version})`;
+}
 
 // Servidores > [Code | Batuta] > Projetos > Sessões — este é o "hub"
 // do servidor pareado.
@@ -47,13 +60,7 @@ export default function ServerHubScreen() {
           <Text style={styles.title}>{server.label}</Text>
         </View>
         <Text style={styles.subtitle}>{server.url}</Text>
-        <Text style={styles.subtitle}>
-          {health[server.id] === undefined
-            ? 'Verificando…'
-            : health[server.id]?.healthy
-              ? `Online · v${(health[server.id] as { version: string }).version}`
-              : 'Offline'}
-        </Text>
+        <Text style={styles.subtitle}>{healthLabel(health[server.id])}</Text>
       </View>
 
       <View style={styles.cards}>
