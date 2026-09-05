@@ -4,6 +4,7 @@ import { useEffect } from 'react';
 import { useColorScheme } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
+import { BrandHeader } from '../src/components/BrandHeader';
 import { syncNotificationChannels } from '../src/lib/notifications';
 import { SettingsContext, useSettings, useSettingsState } from '../src/lib/settings';
 import { useTheme } from '../src/lib/theme';
@@ -36,7 +37,7 @@ function RootNavigator() {
           contentStyle: { backgroundColor: theme.bg },
         }}
       >
-        <Stack.Screen name="index" options={{ title: 'Servidores' }} />
+        <Stack.Screen name="index" options={{ headerTitle: () => <BrandHeader theme={theme} /> }} />
         <Stack.Screen name="pair" options={{ title: 'Parear servidor', presentation: 'modal' }} />
         <Stack.Screen name="server/[id]/index" options={{ title: 'Servidor' }} />
         <Stack.Screen name="server/[id]/settings" options={{ title: 'Configurações' }} />
