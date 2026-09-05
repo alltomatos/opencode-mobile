@@ -1,29 +1,46 @@
-import * as Notifications from 'expo-notifications';
+import { isRunningInExpoGo } from 'expo';
+import type * as NotificationsType from 'expo-notifications';
 import { AppState, Platform } from 'react-native';
 
 import { AppSettings, NotificationCategory } from './settings';
 
 // Push remoto (servidor mandando notificação de fora) não funciona no
 // Expo Go a partir do SDK 53 (precisa de dev build) — conferido na doc
-// oficial (docs.expo.dev/versions/latest/sdk/notifications.md) antes
-// de implementar, pra não prometer algo que não roda no ambiente de
-// teste atual. Isso aqui é só notificação LOCAL: o próprio app, rodando
-// em primeiro plano (ou recém-voltando dele), dispara a notificação na
-// hora que percebe o evento via SSE — não sobrevive o app sendo morto
-// pelo sistema. Documentar essa limitação é mais importante que fingir
-// que não existe.
-Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    // Só mostra o alerta/som visualmente quando o app não está em
-    // primeiro plano — em foreground o usuário já está vendo o card
-    // de permissão/a resposta chegando na tela, notificação ali só
-    // duplicaria informação.
-    shouldShowBanner: AppState.currentState !== 'active',
-    shouldShowList: AppState.currentState !== 'active',
-    shouldPlaySound: AppState.currentState !== 'active',
-    shouldSetBadge: false,
-  }),
-});
+// oficial antes de implementar. O que ninguém documenta com a mesma
+// clareza, e só apareceu testando ao vivo: no Android, só de dar
+// `import * as Notifications from 'expo-notifications'` a lib já
+// registra um listener de push token como efeito colateral do próprio
+// import (DevicePushTokenAutoRegistration.fx.js → addPushTokenListener
+// → warnOfExpoGoPushUsage), e isso lança uma exceção SÍNCRONA dentro
+// do Expo Go — derrubando o app inteiro na inicialização, mesmo sem
+// nenhum código nosso chamar API de push. A única forma de evitar é
+// nunca importar o módulo nesse ambiente específico (Android + Expo
+// Go) — daqui pra baixo, tudo é `require()` condicional, não
+// `import` no topo do arquivo.
+const UNAVAILABLE = Platform.OS === 'android' && isRunningInExpoGo();
+
+function loadNotifications(): typeof NotificationsType | null {
+  if (UNAVAILABLE) return null;
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  return require('expo-notifications') as typeof NotificationsType;
+}
+
+const Notifications = loadNotifications();
+
+if (Notifications) {
+  Notifications.setNotificationHandler({
+    handleNotification: async () => ({
+      // Só mostra o alerta/som visualmente quando o app não está em
+      // primeiro plano — em foreground o usuário já está vendo o card
+      // de permissão/a resposta chegando na tela, notificação ali só
+      // duplicaria informação.
+      shouldShowBanner: AppState.currentState !== 'active',
+      shouldShowList: AppState.currentState !== 'active',
+      shouldPlaySound: AppState.currentState !== 'active',
+      shouldSetBadge: false,
+    }),
+  });
+}
 
 const CHANNELS: Record<NotificationCategory, { id: string; name: string }> = {
   agentDone: { id: 'agent-done', name: 'Respostas do agente' },
@@ -31,7 +48,15 @@ const CHANNELS: Record<NotificationCategory, { id: string; name: string }> = {
   errors: { id: 'errors', name: 'Erros' },
 };
 
+// `false` aqui não significa "negada pelo sistema" — pode ser porque a
+// plataforma nem suporta (Android + Expo Go). A tela de Configurações
+// usa isso pra saber se deve mostrar os toggles ou um aviso.
+export function isNotificationSupportAvailable(): boolean {
+  return Notifications !== null;
+}
+
 export async function requestNotificationPermission(): Promise<boolean> {
+  if (!Notifications) return false;
   const current = await Notifications.getPermissionsAsync();
   if (current.granted) return true;
   const result = await Notifications.requestPermissionsAsync();
@@ -39,6 +64,7 @@ export async function requestNotificationPermission(): Promise<boolean> {
 }
 
 export async function getNotificationPermissionStatus(): Promise<'granted' | 'denied' | 'undetermined'> {
+  if (!Notifications) return 'denied';
   const result = await Notifications.getPermissionsAsync();
   if (result.granted) return 'granted';
   return result.canAskAgain ? 'undetermined' : 'denied';
@@ -51,7 +77,7 @@ export async function getNotificationPermissionStatus(): Promise<'granted' | 'de
 // duplica). No iOS não existe o conceito de canal — o som já vem do
 // campo `sound` de cada notificação individual.
 export async function syncNotificationChannels(settings: AppSettings): Promise<void> {
-  if (Platform.OS !== 'android') return;
+  if (!Notifications || Platform.OS !== 'android') return;
   for (const { id, name } of Object.values(CHANNELS)) {
     await Notifications.setNotificationChannelAsync(id, {
       name,
@@ -64,6 +90,7 @@ export async function syncNotificationChannels(settings: AppSettings): Promise<v
 }
 
 async function notify(category: NotificationCategory, settings: AppSettings, title: string, body: string) {
+  if (!Notifications) return;
   if (!settings.notifications[category]) return;
   const granted = await getNotificationPermissionStatus();
   if (granted !== 'granted') return;
