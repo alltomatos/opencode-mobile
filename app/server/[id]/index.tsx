@@ -3,7 +3,9 @@ import { useEffect, useState } from 'react';
 import { Button, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { StatusDot } from '../../../src/components/StatusDot';
 import { getServerToken, listServers, removeServer, ServerConnection } from '../../../src/lib/servers';
+import { useServerHealth } from '../../../src/lib/serverHealth';
 import { Theme, useTheme } from '../../../src/lib/theme';
 
 // Servidores > [Code | Batuta] > Projetos > Sessões — este é o "hub"
@@ -14,6 +16,7 @@ export default function ServerHubScreen() {
   const theme = useTheme();
   const styles = createStyles(theme);
   const [server, setServer] = useState<ServerConnection | null | undefined>(undefined);
+  const health = useServerHealth(server ? [server] : []);
 
   useEffect(() => {
     listServers().then(async (servers) => {
@@ -39,8 +42,18 @@ export default function ServerHubScreen() {
   return (
     <View style={[styles.container, { paddingBottom: insets.bottom + 16 }]}>
       <View style={styles.header}>
-        <Text style={styles.title}>{server.label}</Text>
+        <View style={styles.titleRow}>
+          <StatusDot health={health[server.id]} theme={theme} />
+          <Text style={styles.title}>{server.label}</Text>
+        </View>
         <Text style={styles.subtitle}>{server.url}</Text>
+        <Text style={styles.subtitle}>
+          {health[server.id] === undefined
+            ? 'Verificando…'
+            : health[server.id]?.healthy
+              ? `Online · v${(health[server.id] as { version: string }).version}`
+              : 'Offline'}
+        </Text>
       </View>
 
       <View style={styles.cards}>
@@ -80,6 +93,11 @@ function createStyles(theme: Theme) {
     },
     header: {
       gap: 4,
+    },
+    titleRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
     },
     title: {
       fontSize: 18,

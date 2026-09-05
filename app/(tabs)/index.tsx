@@ -3,7 +3,9 @@ import { useCallback, useState } from 'react';
 import { FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { StatusDot } from '../../src/components/StatusDot';
 import { listServers, ServerConnection } from '../../src/lib/servers';
+import { useServerHealth } from '../../src/lib/serverHealth';
 import { Theme, useTheme } from '../../src/lib/theme';
 
 export default function ServerListScreen() {
@@ -11,6 +13,7 @@ export default function ServerListScreen() {
   const insets = useSafeAreaInsets();
   const theme = useTheme();
   const styles = createStyles(theme);
+  const health = useServerHealth(servers ?? []);
 
   useFocusEffect(
     useCallback(() => {
@@ -44,7 +47,10 @@ export default function ServerListScreen() {
         renderItem={({ item }) => (
           <Link href={`/server/${item.id}`} asChild>
             <Pressable style={styles.row}>
-              <Text style={styles.rowLabel}>{item.label}</Text>
+              <View style={styles.rowHeader}>
+                <StatusDot health={health[item.id]} theme={theme} />
+                <Text style={styles.rowLabel}>{item.label}</Text>
+              </View>
               <Text style={styles.rowUrl}>{item.url}</Text>
             </Pressable>
           </Link>
@@ -91,6 +97,11 @@ function createStyles(theme: Theme) {
       borderBottomWidth: StyleSheet.hairlineWidth,
       borderBottomColor: theme.border,
     },
+    rowHeader: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+    },
     rowLabel: {
       fontSize: 16,
       fontWeight: '600',
@@ -99,6 +110,7 @@ function createStyles(theme: Theme) {
     rowUrl: {
       color: theme.textDim,
       marginTop: 2,
+      marginLeft: 17,
     },
     addLink: {
       textAlign: 'center',

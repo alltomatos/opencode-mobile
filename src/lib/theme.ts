@@ -26,6 +26,7 @@ const light = {
   toolBg: '#f7f7f8',
   toolBorder: '#e5e7eb',
   toolShimmer: '#c7cad1',
+  success: '#16a34a',
 };
 
 const dark = {
@@ -49,6 +50,7 @@ const dark = {
   toolBg: '#161c23',
   toolBorder: '#262e37',
   toolShimmer: '#3a4451',
+  success: '#22c55e',
 };
 
 export type Theme = typeof light;

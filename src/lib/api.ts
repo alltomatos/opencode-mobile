@@ -245,6 +245,31 @@ function authedUrl(server: ServerConnection, token: string, path: string): strin
   return url.toString();
 }
 
+export type ServerHealth = { healthy: true; version: string } | { healthy: false };
+
+// GET /global/health — conferido ao vivo contra o servidor (não
+// `/health`, que dá 401 sem rota — o real é `/global/health`, definido
+// em packages/opencode/src/server/routes/instance/httpapi/groups/
+// global.ts). Devolve {healthy:true, version} quando o servidor
+// responde normalmente. Timeout curto porque isso é chamado em polling
+// (ver useServerHealth em src/lib/serverHealth.ts) — uma tentativa que
+// trava não pode segurar a próxima rodada de verificação.
+export async function checkServerHealth(server: ServerConnection, token: string, timeoutMs = 5000): Promise<ServerHealth> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const res = await fetch(authedUrl(server, token, '/global/health'), { signal: controller.signal });
+    if (!res.ok) return { healthy: false };
+    const body = (await res.json()) as { healthy?: boolean; version?: string };
+    if (!body.healthy) return { healthy: false };
+    return { healthy: true, version: body.version ?? '?' };
+  } catch {
+    return { healthy: false };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 export async function listCommands(server: ServerConnection, token: string): Promise<Command[]> {
   const res = await fetch(authedUrl(server, token, '/command'));
   if (!res.ok) {
