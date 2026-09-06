@@ -321,12 +321,23 @@ export async function listAgents(server: ServerConnection, token: string): Promi
 // que a raiz de importação de projeto (import.tsx) navega o filesystem
 // do servidor independente de SO/local. Lança em erro real (pasta não
 // existe, sem permissão) — quem chama decide se isso é fatal ou não.
-export async function listFolders(server: ServerConnection, token: string, directory: string): Promise<ProjectFolder[]> {
+// `timeoutMs`: GET /file não é uma listagem "de graça" — o servidor
+// resolve o `directory` como se fosse abrir um projeto ali (git check,
+// upsert no banco, ver Project.fromDirectory/instance-store.ts), então
+// uma unidade mapeada travada (rede, drive removível) pode pendurar a
+// requisição por bastante tempo. Sem limite, um probe de discos
+// (listRoots) inteiro trava esperando essa única unidade.
+export async function listFolders(
+  server: ServerConnection,
+  token: string,
+  directory: string,
+  opts?: { timeoutMs?: number },
+): Promise<ProjectFolder[]> {
   const url = new URL('/file', server.url);
   url.searchParams.set('auth_token', token);
   url.searchParams.set('directory', directory);
   url.searchParams.set('path', '.');
-  const res = await fetch(url.toString());
+  const res = await fetch(url.toString(), opts?.timeoutMs ? { signal: AbortSignal.timeout(opts.timeoutMs) } : undefined);
   if (!res.ok) {
     throw new Error(`GET /file falhou: ${res.status}`);
   }
@@ -340,11 +351,15 @@ export type DriveRoot = { label: string; path: string };
 // forma de descobrir isso de fora é tentar. "/" é a raiz de verdade em
 // POSIX (Linux/macOS) e, no Windows, o Node resolve pra raiz da unidade
 // atual do processo do servidor (só uma unidade, não todas). Pra cobrir
-// D:\, E:\ etc. também, testamos cada letra de unidade em paralelo — a
-// maioria falha rápido (pasta não existe) e é descartada; sobra só o que
-// existe de verdade nessa máquina. Roda uma vez só, ao abrir a tela de
-// importar. Se alguma unidade Windows respondeu, "/" era só um alias da
-// unidade atual e escondemos pra não duplicar visualmente.
+// D:\, E:\ etc. também, testamos cada letra de unidade.
+//
+// Sequencial, NUNCA em paralelo: cada tentativa (mesmo pra uma letra que
+// não existe) faz o servidor tratar aquele caminho como abertura de
+// projeto de verdade — 26 dessas ao mesmo tempo sobrecarregam o processo
+// (contenção no SQLite, spawns de git simultâneos) a ponto dele parar de
+// responder ao health check, e o app mostra o servidor como "Offline"
+// mesmo com ele "vivo" (visto ao vivo, reportado pelo usuário). Rodar
+// uma de cada vez é mais lento, mas mantém o servidor saudável.
 export async function listRoots(server: ServerConnection, token: string): Promise<DriveRoot[]> {
   const candidates: DriveRoot[] = [
     { label: '/', path: '/' },
@@ -353,10 +368,15 @@ export async function listRoots(server: ServerConnection, token: string): Promis
       return { label: `${letter}:`, path: `${letter}:\\` };
     }),
   ];
-  const results = await Promise.allSettled(candidates.map((c) => listFolders(server, token, c.path).then(() => c)));
-  const roots = results
-    .filter((r): r is PromiseFulfilledResult<DriveRoot> => r.status === 'fulfilled')
-    .map((r) => r.value);
+  const roots: DriveRoot[] = [];
+  for (const candidate of candidates) {
+    try {
+      await listFolders(server, token, candidate.path, { timeoutMs: 4000 });
+      roots.push(candidate);
+    } catch {
+      // Não existe, sem permissão, ou demorou demais — pula pro próximo.
+    }
+  }
   const drives = roots.filter((r) => r.path !== '/');
   return drives.length > 0 ? drives : roots;
 }
