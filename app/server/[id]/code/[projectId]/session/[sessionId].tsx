@@ -2,6 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { Link, Stack, useLocalSearchParams } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
 import {
+  AppState,
   FlatList,
   Keyboard,
   Modal,
@@ -187,8 +188,27 @@ export default function SessionChatScreen() {
 
   useEffect(() => {
     if (!server || !token || !sessionId) return;
+    // Cópias com tipo estreitado (`ServerConnection`/`string`, não
+    // `| null | undefined`) pra usar dentro de funções aninhadas
+    // (reconcileMessages) — o TS não propaga o narrowing do `if` acima
+    // pra dentro de `function` declarada mais abaixo no mesmo escopo.
+    const activeServer = server;
+    const activeToken = token;
 
     let cancelled = false;
+    // Reconcilia o histórico contra o servidor — não só uma vez ao
+    // montar a tela, mas toda vez que a conexão de eventos volta
+    // (reconexão da SSE) ou o app volta pro primeiro plano. Mão dupla
+    // de verdade: enquanto o app fica minimizado ou a rede cai, uma
+    // mensagem mandada pelo desktop/CLI (ou por outro celular) na mesma
+    // sessão só chegaria aqui quando a SSE reconectasse — sem esse
+    // refetch, ela ficava invisível até o usuário sair e voltar da tela
+    // (reportado como bug: "histórico tem que ser via mão dupla").
+    function reconcileMessages() {
+      listMessages(activeServer, activeToken, sessionId)
+        .then((data) => !cancelled && setMessages(data))
+        .catch(() => {});
+    }
     withRetry(() => listMessages(server, token, sessionId))
       .then((data) => !cancelled && setMessages(data))
       .catch((e) => !cancelled && setError(e instanceof Error ? e.message : 'Falha ao carregar mensagens.'));
@@ -230,6 +250,7 @@ export default function SessionChatScreen() {
     // assistente chega incrementalmente por aqui via message.part.updated
     // — dá a sensação de streaming mesmo sem usar prompt_async.
     const controller = new AbortController();
+    let firstConnection = true;
     (async () => {
       // A conexão SSE cai sozinha de vez em quando em rede móvel/VPN
       // (visto ao vivo: "fetch failed: SocketException: connection
@@ -239,6 +260,13 @@ export default function SessionChatScreen() {
       // vez. Continua tentando reconectar até a tela ser desmontada.
       while (!cancelled) {
         try {
+          // Cada reconexão (a primeira já tem o listMessages() inicial
+          // acima, então pula) reconcilia o histórico antes de voltar a
+          // escutar eventos novos — cobre qualquer mensagem criada em
+          // outro cliente (desktop, CLI, outro celular) durante o tempo
+          // em que a SSE esteve caída.
+          if (!firstConnection) reconcileMessages();
+          firstConnection = false;
           for await (const event of subscribeEvents(server, token, controller.signal)) {
             if (cancelled) return;
           if (event.type === 'session.created' || event.type === 'session.updated') {
@@ -328,9 +356,21 @@ export default function SessionChatScreen() {
       }
     })();
 
+    // O SO costuma suspender a conexão de rede (e a SSE junto) assim
+    // que o app vai pro background — o listener acima só percebe isso
+    // quando o `fetch` finalmente estoura, o que pode demorar. Reconcilia
+    // na hora que o usuário volta a olhar a tela, sem esperar esse timeout.
+    let appActive = AppState.currentState === 'active';
+    const appStateSub = AppState.addEventListener('change', (state) => {
+      const wasActive = appActive;
+      appActive = state === 'active';
+      if (appActive && !wasActive) reconcileMessages();
+    });
+
     return () => {
       cancelled = true;
       controller.abort();
+      appStateSub.remove();
     };
   }, [server, token, sessionId]);
 

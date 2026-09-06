@@ -6,7 +6,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { StatusDot } from '../../../src/components/StatusDot';
 import { Row } from '../../../src/components/ui/Row';
 import { Section } from '../../../src/components/ui/Section';
-import { listProjectFolders, ServerHealth } from '../../../src/lib/api';
+import { listAllProjects, ServerHealth } from '../../../src/lib/api';
 import {
   describeConnection,
   getServerToken,
@@ -55,7 +55,7 @@ export default function ServerHubScreen() {
 
   useEffect(() => {
     if (!server || !token) return;
-    listProjectFolders(server, token)
+    listAllProjects(server, token)
       .then((folders) => setProjectCount(folders.length))
       .catch(() => {});
   }, [server, token]);

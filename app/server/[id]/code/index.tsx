@@ -7,7 +7,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { EmptyState } from '../../../../src/components/ui/EmptyState';
 import { Row } from '../../../../src/components/ui/Row';
 import { Section } from '../../../../src/components/ui/Section';
-import { listProjectFolders, ProjectFolder } from '../../../../src/lib/api';
+import { listAllProjects, ProjectFolder } from '../../../../src/lib/api';
 import { getServerToken, listServers, ServerConnection } from '../../../../src/lib/servers';
 import { Theme, useTheme } from '../../../../src/lib/theme';
 
@@ -32,7 +32,7 @@ export default function ProjectListScreen() {
 
   useEffect(() => {
     if (!server || !token) return;
-    listProjectFolders(server, token)
+    listAllProjects(server, token)
       .then(setProjects)
       .catch((e) => setError(e instanceof Error ? e.message : 'Falha ao listar projetos.'));
   }, [server, token]);
@@ -80,6 +80,13 @@ export default function ProjectListScreen() {
             iconColor={theme.accent}
             title="Adicionar projeto"
             onPress={() => router.push(`/server/${id}/code/add`)}
+          />
+          <Row
+            icon="folder-open-outline"
+            iconColor={theme.accent}
+            title="Importar projeto existente"
+            subtitle="Uma pasta que já existe no computador do servidor"
+            onPress={() => router.push(`/server/${id}/code/import`)}
             last
           />
         </View>

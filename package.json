@@ -1,6 +1,6 @@
 {
   "name": "opencode-mobile",
-  "version": "1.0.0",
+  "version": "0.1.0",
   "main": "expo-router/entry",
   "dependencies": {
     "@expo/metro-runtime": "~57.0.15",
@@ -34,7 +34,8 @@
     "start": "expo start",
     "android": "expo start --android",
     "ios": "expo start --ios",
-    "web": "expo start --web"
+    "web": "expo start --web",
+    "version": "node scripts/sync-app-version.js && git add app.json"
   },
   "private": true
 }

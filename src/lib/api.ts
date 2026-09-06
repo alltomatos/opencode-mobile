@@ -1,5 +1,6 @@
 import { fetch } from 'expo/fetch';
 
+import { basename, normalizePathKey } from './paths';
 import type { ServerConnection } from './servers';
 
 // Subconjunto do tipo real (packages/sdk/js/src/v2/gen/types.gen.ts no
@@ -315,28 +316,124 @@ export async function listAgents(server: ServerConnection, token: string): Promi
   return (await res.json()) as Agent[];
 }
 
-// Lista as pastas reais dentro de PROJECTS_ROOT via GET /file, em vez
-// de GET /project. Motivo: a resolução de "diretório → projeto" do
-// servidor só reconhece pastas com git (e mesmo assim é cacheada pra
-// sempre por diretório — ver docs/prd/mobile-api-reference.md e o
-// commit que corrigiu isso). Um projeto sem git nunca apareceria em
-// GET /project, mas o usuário pode legitimamente ter um. Listar
-// direto o filesystem não depende de nenhuma dessas resoluções — só
-// da pasta existir. Agrupamos sessões por `directory` (string), não
-// por id de projeto, então isso não perde nada pro resto do app.
-export async function listProjectFolders(server: ServerConnection, token: string): Promise<ProjectFolder[]> {
+// Lista as subpastas de qualquer diretório absoluto via GET /file — o
+// endpoint aceita `directory` arbitrário (não só PROJECTS_ROOT), é assim
+// que a raiz de importação de projeto (import.tsx) navega o filesystem
+// do servidor independente de SO/local. Lança em erro real (pasta não
+// existe, sem permissão) — quem chama decide se isso é fatal ou não.
+export async function listFolders(server: ServerConnection, token: string, directory: string): Promise<ProjectFolder[]> {
   const url = new URL('/file', server.url);
   url.searchParams.set('auth_token', token);
-  url.searchParams.set('directory', PROJECTS_ROOT);
+  url.searchParams.set('directory', directory);
   url.searchParams.set('path', '.');
   const res = await fetch(url.toString());
   if (!res.ok) {
-    // PROJECTS_ROOT ainda não existe (nenhum projeto criado ainda) —
-    // lista vazia é a resposta certa, não um erro pro usuário ver.
-    return [];
+    throw new Error(`GET /file falhou: ${res.status}`);
   }
   const entries = (await res.json()) as { name: string; type: 'file' | 'directory'; absolute: string }[];
   return entries.filter((e) => e.type === 'directory').map((e) => ({ name: e.name, path: e.absolute }));
+}
+
+export type DriveRoot = { label: string; path: string };
+
+// Não existe endpoint "liste as unidades/discos" no servidor — a única
+// forma de descobrir isso de fora é tentar. "/" é a raiz de verdade em
+// POSIX (Linux/macOS) e, no Windows, o Node resolve pra raiz da unidade
+// atual do processo do servidor (só uma unidade, não todas). Pra cobrir
+// D:\, E:\ etc. também, testamos cada letra de unidade em paralelo — a
+// maioria falha rápido (pasta não existe) e é descartada; sobra só o que
+// existe de verdade nessa máquina. Roda uma vez só, ao abrir a tela de
+// importar. Se alguma unidade Windows respondeu, "/" era só um alias da
+// unidade atual e escondemos pra não duplicar visualmente.
+export async function listRoots(server: ServerConnection, token: string): Promise<DriveRoot[]> {
+  const candidates: DriveRoot[] = [
+    { label: '/', path: '/' },
+    ...Array.from({ length: 26 }, (_, i) => {
+      const letter = String.fromCharCode(65 + i);
+      return { label: `${letter}:`, path: `${letter}:\\` };
+    }),
+  ];
+  const results = await Promise.allSettled(candidates.map((c) => listFolders(server, token, c.path).then(() => c)));
+  const roots = results
+    .filter((r): r is PromiseFulfilledResult<DriveRoot> => r.status === 'fulfilled')
+    .map((r) => r.value);
+  const drives = roots.filter((r) => r.path !== '/');
+  return drives.length > 0 ? drives : roots;
+}
+
+// Lista as pastas reais dentro de PROJECTS_ROOT. Cobre o caso de uma
+// pasta recém-criada pelo app (mkdir/git clone em add.tsx) que ainda não
+// foi "aberta" (nenhuma sessão/diretório tocou nela ainda) — GET
+// /project só lista o que já passou por Project.fromDirectory, e isso só
+// acontece na primeira requisição real contra aquele diretório. Sem
+// isso, um projeto recém-criado sumiria da lista até o usuário abrir uma
+// sessão nele por fora do app.
+export async function listProjectFolders(server: ServerConnection, token: string): Promise<ProjectFolder[]> {
+  try {
+    return await listFolders(server, token, PROJECTS_ROOT);
+  } catch {
+    // PROJECTS_ROOT ainda não existe (nenhum projeto criado ainda, ou o
+    // servidor nem segue essa convenção — caso do desktop) — lista
+    // vazia é a resposta certa, não um erro pro usuário ver.
+    return [];
+  }
+}
+
+// Subconjunto de Project.Info (packages/opencode/src/project/project.ts
+// no repo do fork) — só os campos usados pela lista de projetos.
+export type ProjectInfo = {
+  id: string;
+  worktree: string;
+  name?: string;
+  vcs?: string;
+};
+
+// GET /project — "lista todos os projetos já abertos com o OpenCode",
+// independente de pasta/diretório (não usa `directory` de query nem
+// resolve nada por cima do diretório atual da instância, ver
+// packages/opencode/src/server/routes/instance/httpapi/handlers/project.ts
+// `list` → `Project.Service.list()` → SELECT * FROM project). É a mesma
+// fonte que popula a sidebar "Projetos" do app desktop, então cobre
+// projetos em qualquer pasta do disco (D:\dev\Diponera, ~/code/foo,
+// etc.) — não só os que vivem sob PROJECTS_ROOT. Requer que o projeto já
+// tenha sido tocado por pelo menos uma sessão nessa pasta (git ou não —
+// só pastas sem VCS *nenhum* colapsam num projeto "global" único, ver
+// Project.fromDirectory).
+export async function listProjects(server: ServerConnection, token: string): Promise<ProjectInfo[]> {
+  const res = await fetch(authedUrl(server, token, '/project'));
+  if (!res.ok) {
+    throw new Error(`GET /project falhou: ${res.status}`);
+  }
+  return (await res.json()) as ProjectInfo[];
+}
+
+// Une as duas fontes de projeto disponíveis no servidor: GET /project
+// (qualquer pasta que já teve uma sessão aberta, incluindo as do
+// desktop fora de PROJECTS_ROOT) e a listagem de pastas em
+// PROJECTS_ROOT (cobre pasta recém-criada pelo próprio app, ver
+// listProjectFolders). Deduplicadas por caminho absoluto — GET /project
+// ganha o nome quando os dois concordam, já que reflete o nome/ícone
+// customizado que o usuário deu ao projeto no desktop.
+export async function listAllProjects(server: ServerConnection, token: string): Promise<ProjectFolder[]> {
+  const [projects, folders] = await Promise.all([
+    listProjects(server, token).catch(() => [] as ProjectInfo[]),
+    listProjectFolders(server, token).catch(() => [] as ProjectFolder[]),
+  ]);
+
+  const byPath = new Map<string, ProjectFolder>();
+  for (const project of projects) {
+    if (!project.worktree || project.worktree === '/') continue;
+    byPath.set(normalizePathKey(project.worktree), {
+      name: project.name || basename(project.worktree),
+      path: project.worktree,
+    });
+  }
+  for (const folder of folders) {
+    const key = normalizePathKey(folder.path);
+    if (!byPath.has(key)) byPath.set(key, folder);
+  }
+
+  return [...byPath.values()].sort((a, b) => a.name.localeCompare(b.name));
 }
 
 // `directory` não é opcional na prática: sem ele, o servidor resolve

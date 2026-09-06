@@ -18,6 +18,7 @@ import {
   Session,
   subscribeEvents,
 } from '../../../../../src/lib/api';
+import { basename } from '../../../../../src/lib/paths';
 import { getServerToken, listServers, ServerConnection } from '../../../../../src/lib/servers';
 import { Theme, useTheme } from '../../../../../src/lib/theme';
 
@@ -28,7 +29,7 @@ export default function ProjectSessionsScreen() {
   // pastas reais em vez de confiar na resolução de "projeto" do
   // servidor (frágil e não cobre pastas sem git).
   const directory = decodeURIComponent(projectId);
-  const projectName = directory.split('/').pop() || directory;
+  const projectName = basename(directory);
   // Nunca reusar `projectId` bruto pra montar uma URL nova — não dá
   // pra saber se o React Navigation vai devolver o valor ainda
   // codificado ou já decodificado (não documentado), e `directory`

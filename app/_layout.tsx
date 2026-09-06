@@ -44,6 +44,7 @@ function RootNavigator() {
         <Stack.Screen name="server/[id]/settings" options={{ title: 'Configurações' }} />
         <Stack.Screen name="server/[id]/code/index" options={{ title: 'Projetos' }} />
         <Stack.Screen name="server/[id]/code/add" options={{ title: 'Adicionar projeto', presentation: 'modal' }} />
+        <Stack.Screen name="server/[id]/code/import" options={{ title: 'Importar projeto', presentation: 'modal' }} />
         <Stack.Screen name="server/[id]/code/[projectId]/index" options={{ title: 'Sessões' }} />
         <Stack.Screen name="server/[id]/code/[projectId]/session/[sessionId]" options={{ title: 'Sessão' }} />
         <Stack.Screen name="server/[id]/batuta/index" options={{ title: 'Batuta' }} />
