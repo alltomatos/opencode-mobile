@@ -38,6 +38,7 @@ import {
   runCommand,
   SelectedModel,
   sendPrompt,
+  sendPromptAsync,
   Session,
   SessionStatus,
   subscribeEvents,
@@ -151,6 +152,15 @@ export default function SessionChatScreen() {
   settingsRef.current = settings;
   const [children, setChildren] = useState<Session[]>([]);
   const [sessionStatus, setSessionStatus] = useState<SessionStatus | null>(null);
+  // Com prompt_async o POST volta na hora — quem chama não sabe mais
+  // quando o turno de verdade terminou (o servidor processa desacoplado
+  // da conexão, ver comentário em sendPromptAsync). Só session.status
+  // via SSE conta essa história: espera ver "busy" (turno começou de
+  // verdade — sem isso um idle "de antes" que ainda não tinha virado
+  // busy resolveria na hora, cedo demais) e depois "idle" de novo pra
+  // dar como concluído. Guardado em ref porque é lido/escrito de dentro
+  // do loop de eventos SSE (outro efeito) e de dispatchText.
+  const turnWaiterRef = useRef<{ sawBusy: boolean; resolve: () => void } | null>(null);
   const [keyboardHeight, setKeyboardHeight] = useState(0);
   const keyboardVisible = keyboardHeight > 0;
 
@@ -209,6 +219,19 @@ export default function SessionChatScreen() {
       listMessages(activeServer, activeToken, sessionId)
         .then((data) => !cancelled && setMessages(data))
         .catch(() => {});
+      // Um turno enviado por prompt_async pode ter começado E terminado
+      // inteiro enquanto a SSE estava caída (app minimizado) — sem
+      // nenhum evento busy/idle passando por aqui nesse meio tempo, quem
+      // está esperando (dispatchText) travaria pra sempre. O
+      // listMessages acima já traz o resultado final; libera quem
+      // esperava assim que reconecta, mesmo que o turno ainda esteja
+      // rodando de verdade (nesse caso raro, os eventos ao vivo que
+      // vierem depois continuam atualizando `messages` normalmente).
+      if (turnWaiterRef.current) {
+        const waiter = turnWaiterRef.current;
+        turnWaiterRef.current = null;
+        waiter.resolve();
+      }
     }
     withRetry(() => listMessages(server, token, sessionId))
       .then((data) => !cancelled && setMessages(data))
@@ -320,6 +343,14 @@ export default function SessionChatScreen() {
               .properties;
             if (sessionID !== sessionId) continue;
             setSessionStatus(status.type === 'idle' ? null : status);
+            const waiter = turnWaiterRef.current;
+            if (waiter) {
+              if (status.type === 'busy') waiter.sawBusy = true;
+              else if (waiter.sawBusy) {
+                turnWaiterRef.current = null;
+                waiter.resolve();
+              }
+            }
           } else if (event.type === 'message.part.updated') {
             const { sessionID, part } = (event as { properties: { sessionID: string; part: Part } }).properties;
             if (sessionID !== sessionId) continue;
@@ -437,7 +468,16 @@ export default function SessionChatScreen() {
       },
     ]);
     try {
-      await sendPrompt(server, token, sessionId, text, MODE_AGENT[mode], model ?? undefined);
+      // prompt_async volta na hora — o turno roda no servidor
+      // desacoplado desta conexão (ver comentário em sendPromptAsync),
+      // então fechar o app no meio não interrompe mais o agente. Espera
+      // o ciclo busy→idle via SSE (turnWaiterRef) pra saber quando o
+      // turno de verdade terminou antes de puxar o histórico final e
+      // liberar a próxima mensagem da fila.
+      await sendPromptAsync(server, token, sessionId, text, MODE_AGENT[mode], model ?? undefined);
+      await new Promise<void>((resolve) => {
+        turnWaiterRef.current = { sawBusy: false, resolve };
+      });
       const [fresh, session] = await Promise.all([
         listMessages(server, token, sessionId),
         getSession(server, token, sessionId),

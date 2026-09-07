@@ -475,6 +475,20 @@ export async function listSessions(server: ServerConnection, token: string, dire
   return (await res.json()) as Session[];
 }
 
+// GET /session/status — snapshot atual (id → busy/idle/retry) de TODAS
+// as sessões, não só de uma. Usado pra pintar o indicador "trabalhando"
+// na lista de sessões assim que a tela abre — sem isso, só dava pra
+// saber quem está rodando observando eventos SSE ao vivo dali em diante,
+// perdendo o estado de qualquer turno que já estava em andamento antes
+// da tela ser aberta.
+export async function getSessionStatusMap(server: ServerConnection, token: string): Promise<Record<string, SessionStatus>> {
+  const res = await fetch(authedUrl(server, token, '/session/status'));
+  if (!res.ok) {
+    throw new Error(`GET /session/status falhou: ${res.status}`);
+  }
+  return (await res.json()) as Record<string, SessionStatus>;
+}
+
 // POST /session — a rota v1 ativa recebe `directory` como query param
 // (mesmo padrão de WorkspaceRoutingQuery usado em toda a API), não no
 // corpo — existe uma rota /api/session (v2) separada que usa
@@ -580,10 +594,43 @@ export async function listMessages(
   return (await res.json()) as MessageWithParts[];
 }
 
-// POST /session/:id/message (síncrono — segura a conexão até a resposta
-// completar). docs/prd/mobile-api-reference.md §5.1 sugere prompt_async
-// pra não travar a UI numa conexão HTTP longa; fica pra quando a tela
-// precisar de progresso incremental via SSE em vez de aguardar aqui.
+// POST /session/:id/prompt_async — dispara o turno do agente e volta na
+// hora (204, sem corpo). Diferença crucial pra `sendPrompt` (síncrona):
+// no fork, o handler faz `Effect.forkIn(scope, ...)` usando o escopo do
+// PRÓPRIO SERVIDOR, não o da requisição HTTP (ver
+// packages/opencode/src/server/routes/instance/httpapi/handlers/
+// session.ts, promptAsync) — o turno roda desacoplado da conexão. Com
+// `sendPrompt`, fechar o app/a conexão cair no meio da resposta
+// interrompe o processamento no servidor junto (reportado ao vivo:
+// fechar o app parava a conversa); com prompt_async ele continua rodando
+// e o app só acompanha via SSE (message.part.updated/session.status),
+// reconciliando o que perdeu ao reabrir a tela.
+export async function sendPromptAsync(
+  server: ServerConnection,
+  token: string,
+  sessionID: string,
+  text: string,
+  agent?: string,
+  model?: SelectedModel
+): Promise<void> {
+  const res = await fetch(authedUrl(server, token, `/session/${sessionID}/prompt_async`), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      parts: [{ type: 'text', text }],
+      ...(agent ? { agent } : {}),
+      ...(model ? { model: { modelID: model.modelID, providerID: model.providerID } } : {}),
+    }),
+  });
+  if (!res.ok) {
+    throw new Error(`POST /session/${sessionID}/prompt_async falhou: ${await errorDetail(res)}`);
+  }
+}
+
+// POST /session/:id/message (síncrona — segura a conexão até a resposta
+// completar). Ainda usada por dispatchCommand (comandos são rápidos, não
+// turnos longos de agente) — mensagens de texto normais usam
+// sendPromptAsync acima.
 export async function sendPrompt(
   server: ServerConnection,
   token: string,

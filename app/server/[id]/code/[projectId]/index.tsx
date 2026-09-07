@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { Alert, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { EmptyState } from '../../../../../src/components/ui/EmptyState';
@@ -14,8 +14,10 @@ import {
   deleteProjectMemory,
   deleteSession,
   getProjectMemoryStatus,
+  getSessionStatusMap,
   listSessions,
   Session,
+  SessionStatus,
   subscribeEvents,
 } from '../../../../../src/lib/api';
 import { basename } from '../../../../../src/lib/paths';
@@ -51,6 +53,7 @@ export default function ProjectSessionsScreen() {
   const [deletingSessionID, setDeletingSessionID] = useState<string | null>(null);
   const [hasMemory, setHasMemory] = useState(false);
   const [query, setQuery] = useState('');
+  const [statusMap, setStatusMap] = useState<Record<string, SessionStatus>>({});
 
   useEffect(() => {
     listServers().then(async (servers) => {
@@ -70,6 +73,14 @@ export default function ProjectSessionsScreen() {
     getProjectMemoryStatus(server, token, directory)
       .then((value) => !cancelled && setHasMemory(value))
       .catch(() => {});
+    // Snapshot de quem já está rodando ANTES desta tela abrir — a partir
+    // daqui os eventos SSE (session.status) mantêm isso atualizado ao
+    // vivo, mas sem essa busca inicial um agente que já estava
+    // trabalhando (aberto em outra aba/dispositivo) apareceria como
+    // parado até o próximo evento chegar.
+    getSessionStatusMap(server, token)
+      .then((data) => !cancelled && setStatusMap(data))
+      .catch(() => {});
 
     const controller = new AbortController();
     (async () => {
@@ -86,6 +97,16 @@ export default function ProjectSessionsScreen() {
           } else if (event.type === 'session.deleted') {
             const info = (event as { properties: { info: Session } }).properties.info;
             setSessions((prev) => (prev ?? []).filter((s) => s.id !== info.id));
+            setStatusMap((prev) => {
+              if (!(info.id in prev)) return prev;
+              const next = { ...prev };
+              delete next[info.id];
+              return next;
+            });
+          } else if (event.type === 'session.status') {
+            const { sessionID, status } = (event as { properties: { sessionID: string; status: SessionStatus } })
+              .properties;
+            setStatusMap((prev) => ({ ...prev, [sessionID]: status }));
           }
         }
       } catch {
@@ -236,28 +257,36 @@ export default function ProjectSessionsScreen() {
           <EmptyState icon="search" title="Nada encontrado" subtitle="Nenhuma sessão bate com essa busca." />
         ) : (
           <Section>
-            {filteredSessions.map((item, i) => (
-              <Row
-                key={item.id}
-                icon="chatbubble-ellipses-outline"
-                iconColor={theme.accent}
-                title={item.title || item.id}
-                onPress={() => router.push(`/server/${id}/code/${encodedProjectId}/session/${item.id}`)}
-                last={i === filteredSessions.length - 1}
-                accessory={
-                  deletingSessionID === item.id ? undefined : (
-                    <Pressable
-                      onPress={() => confirmDeleteSession(item)}
-                      hitSlop={8}
-                      style={styles.rowDeleteHit}
-                    >
-                      <Ionicons name="trash-outline" size={18} color={theme.textFaint} />
-                    </Pressable>
-                  )
-                }
-                loading={deletingSessionID === item.id}
-              />
-            ))}
+            {filteredSessions.map((item, i) => {
+              const status = statusMap[item.id];
+              const busy = status?.type === 'busy' || status?.type === 'retry';
+              return (
+                <Row
+                  key={item.id}
+                  icon="chatbubble-ellipses-outline"
+                  iconColor={busy ? theme.success : theme.accent}
+                  title={item.title || item.id}
+                  subtitle={busy ? 'Trabalhando…' : undefined}
+                  onPress={() => router.push(`/server/${id}/code/${encodedProjectId}/session/${item.id}`)}
+                  last={i === filteredSessions.length - 1}
+                  accessory={
+                    deletingSessionID === item.id ? undefined : (
+                      <View style={styles.rowAccessory}>
+                        {busy && <ActivityIndicator size="small" color={theme.success} />}
+                        <Pressable
+                          onPress={() => confirmDeleteSession(item)}
+                          hitSlop={8}
+                          style={styles.rowDeleteHit}
+                        >
+                          <Ionicons name="trash-outline" size={18} color={theme.textFaint} />
+                        </Pressable>
+                      </View>
+                    )
+                  }
+                  loading={deletingSessionID === item.id}
+                />
+              );
+            })}
           </Section>
         )}
 
@@ -341,6 +370,11 @@ function createStyles(theme: Theme) {
       fontSize: 16,
       color: theme.text,
       padding: 0,
+    },
+    rowAccessory: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 12,
     },
     rowDeleteHit: {
       padding: 4,
