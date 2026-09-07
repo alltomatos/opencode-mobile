@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import {
   AppState,
   FlatList,
+  Image,
   Keyboard,
   Modal,
   Platform,
@@ -14,11 +15,14 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import * as ImagePicker from 'expo-image-picker';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import {
   Command,
+  FilePart,
   getSession,
+  ImageAttachment,
   listChildren,
   listCommands,
   listMessages,
@@ -134,8 +138,11 @@ export default function SessionChatScreen() {
   // porque o loop de drenagem roda dentro de uma função async e
   // precisa ler o valor mais recente sem depender de closures presas
   // ao render em que a função foi criada.
-  const queueRef = useRef<string[]>([]);
+  type QueuedPrompt = { text: string; atts?: ImageAttachment[] };
+  const queueRef = useRef<QueuedPrompt[]>([]);
   const [queueCount, setQueueCount] = useState(0);
+  const [attachments, setAttachments] = useState<ImageAttachment[]>([]);
+  const [showImagePickerOptions, setShowImagePickerOptions] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [permissionQueue, setPermissionQueue] = useState<PermissionRequest[]>([]);
   const [questionQueue, setQuestionQueue] = useState<QuestionRequest[]>([]);
@@ -422,12 +429,59 @@ export default function SessionChatScreen() {
       ? commands.filter((c) => c.name.toLowerCase().startsWith(draft.slice(1).toLowerCase()))
       : [];
 
-  function enqueue(text: string) {
-    queueRef.current = [...queueRef.current, text];
+  async function handlePickImageFromGallery() {
+    setShowImagePickerOptions(false);
+    try {
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ['images'],
+        base64: true,
+        quality: 0.8,
+      });
+      if (!result.canceled && result.assets[0]?.base64) {
+        const asset = result.assets[0];
+        const mime = asset.mimeType ?? 'image/jpeg';
+        const dataUrl = `data:${mime};base64,${asset.base64}`;
+        setAttachments((prev) => [...prev, { mime, dataUrl }]);
+      }
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Falha ao selecionar imagem da galeria.');
+    }
+  }
+
+  async function handleTakeImageWithCamera() {
+    setShowImagePickerOptions(false);
+    try {
+      const permission = await ImagePicker.requestCameraPermissionsAsync();
+      if (!permission.granted) {
+        setError('Permissão de acesso à câmera negada.');
+        return;
+      }
+      const result = await ImagePicker.launchCameraAsync({
+        mediaTypes: ['images'],
+        base64: true,
+        quality: 0.8,
+      });
+      if (!result.canceled && result.assets[0]?.base64) {
+        const asset = result.assets[0];
+        const mime = asset.mimeType ?? 'image/jpeg';
+        const dataUrl = `data:${mime};base64,${asset.base64}`;
+        setAttachments((prev) => [...prev, { mime, dataUrl }]);
+      }
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Falha ao tirar foto.');
+    }
+  }
+
+  function handleRemoveAttachment(index: number) {
+    setAttachments((prev) => prev.filter((_, i) => i !== index));
+  }
+
+  function enqueue(item: QueuedPrompt) {
+    queueRef.current = [...queueRef.current, item];
     setQueueCount(queueRef.current.length);
   }
 
-  function dequeue(): string | undefined {
+  function dequeue(): QueuedPrompt | undefined {
     const [next, ...rest] = queueRef.current;
     queueRef.current = rest;
     setQueueCount(rest.length);
@@ -451,7 +505,7 @@ export default function SessionChatScreen() {
     }
   }
 
-  async function dispatchText(text: string) {
+  async function dispatchText(text: string, atts?: ImageAttachment[]) {
     if (!server || !token) return;
     setError(null);
     // Eco otimista: mostra a mensagem do usuário na hora, sem esperar
@@ -460,11 +514,31 @@ export default function SessionChatScreen() {
     // não desaparece da tela — só o listMessages() do sucesso substitui
     // esse placeholder pelo dado real do servidor.
     const optimisticID = `optimistic-${Date.now()}`;
+    const optimisticParts: Part[] = [];
+    if (atts && atts.length > 0) {
+      atts.forEach((att, idx) => {
+        optimisticParts.push({
+          id: `${optimisticID}-file-${idx}`,
+          messageID: optimisticID,
+          type: 'file',
+          mime: att.mime,
+          url: att.dataUrl,
+        } as FilePart);
+      });
+    }
+    if (text.trim()) {
+      optimisticParts.push({
+        id: `${optimisticID}-text`,
+        messageID: optimisticID,
+        type: 'text',
+        text,
+      });
+    }
     setMessages((prev) => [
       ...(prev ?? []),
       {
         info: { id: optimisticID, sessionID: sessionId, role: 'user', time: { created: Date.now() } },
-        parts: [{ id: `${optimisticID}-text`, messageID: optimisticID, type: 'text', text }],
+        parts: optimisticParts,
       },
     ]);
     try {
@@ -474,7 +548,7 @@ export default function SessionChatScreen() {
       // o ciclo busy→idle via SSE (turnWaiterRef) pra saber quando o
       // turno de verdade terminou antes de puxar o histórico final e
       // liberar a próxima mensagem da fila.
-      await sendPromptAsync(server, token, sessionId, text, MODE_AGENT[mode], model ?? undefined);
+      await sendPromptAsync(server, token, sessionId, text, MODE_AGENT[mode], model ?? undefined, atts);
       await new Promise<void>((resolve) => {
         turnWaiterRef.current = { sawBusy: false, resolve };
       });
@@ -494,7 +568,8 @@ export default function SessionChatScreen() {
   // "/nome args" roda via POST /session/:id/command, não como texto —
   // /model digitado como mensagem normal só faz o assistente
   // *explicar* o comando (confirmado ao testar), não executá-lo.
-  async function dispatchOne(text: string) {
+  async function dispatchOne(item: QueuedPrompt) {
+    const { text, atts } = item;
     if (text.startsWith('/')) {
       const [name, ...rest] = text.slice(1).split(' ');
       if (commands.some((c) => c.name === name)) {
@@ -502,7 +577,7 @@ export default function SessionChatScreen() {
         return;
       }
     }
-    await dispatchText(text);
+    await dispatchText(text, atts);
   }
 
   // O servidor rejeita um segundo prompt na mesma sessão enquanto ela
@@ -512,12 +587,12 @@ export default function SessionChatScreen() {
   // essa função vira um loop que drena a fila uma mensagem por vez,
   // igual ao Claude Code: pode digitar e mandar quantas quiser
   // enquanto a anterior ainda está rodando.
-  async function drainQueue(first: string) {
+  async function drainQueue(first: QueuedPrompt) {
     setSending(true);
-    let text: string | undefined = first;
-    while (text !== undefined) {
-      await dispatchOne(text);
-      text = dequeue();
+    let current: QueuedPrompt | undefined = first;
+    while (current !== undefined) {
+      await dispatchOne(current);
+      current = dequeue();
     }
     setSending(false);
     // Só notifica quando a fila inteira esvaziou — se ainda tem
@@ -528,13 +603,16 @@ export default function SessionChatScreen() {
 
   async function handleSend() {
     const text = draft.trim();
-    if (!text || !server || !token) return;
+    const atts = [...attachments];
+    if ((!text && atts.length === 0) || !server || !token) return;
     setDraft('');
+    setAttachments([]);
+    const item: QueuedPrompt = { text, atts };
     if (sending) {
-      enqueue(text);
+      enqueue(item);
       return;
     }
-    await drainQueue(text);
+    await drainQueue(item);
   }
 
   async function handlePermissionReply(req: PermissionRequest, reply: 'once' | 'always' | 'reject') {
@@ -669,11 +747,12 @@ export default function SessionChatScreen() {
         ListEmptyComponent={<Text style={styles.placeholder}>Sem mensagens ainda — comece a conversa.</Text>}
         renderItem={({ item }) => {
           const text = textOf(item);
+          const fileParts = item.parts.filter((p: Part): p is FilePart => p.type === 'file');
           const activityParts = item.parts.filter(
             (p: Part): p is ToolPart | ReasoningPart =>
               !isHiddenPart(p, settings.showReasoningSummaries) && (p.type === 'tool' || p.type === 'reasoning')
           );
-          if (!text && activityParts.length === 0) return null;
+          if (!text && fileParts.length === 0 && activityParts.length === 0) return null;
           const isUser = item.info.role === 'user';
           return (
             <View style={[styles.bubbleRow, isUser ? styles.bubbleRowUser : undefined]}>
@@ -685,6 +764,11 @@ export default function SessionChatScreen() {
                     <ToolCard key={p.id} part={p} theme={theme} defaultExpanded={settings.toolPartsExpanded} />
                   )
                 )}
+                {fileParts.map((fp: FilePart) => (
+                  <View key={fp.id} style={styles.attachedImageWrapper}>
+                    <Image source={{ uri: fp.url }} style={styles.attachedImageMessage} resizeMode="cover" />
+                  </View>
+                ))}
                 {!!text && (
                   <View style={[styles.bubble, isUser ? styles.bubbleUser : styles.bubbleAssistant]}>
                     <Text style={isUser ? styles.bubbleTextUser : styles.bubbleTextAssistant}>{text}</Text>
@@ -793,7 +877,27 @@ export default function SessionChatScreen() {
         </Text>
       )}
 
+      {attachments.length > 0 && (
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.attachmentStrip} contentContainerStyle={styles.attachmentStripContent}>
+          {attachments.map((att, idx) => (
+            <View key={idx} style={styles.attachmentThumbWrapper}>
+              <Image source={{ uri: att.dataUrl }} style={styles.attachmentThumb} />
+              <TouchableOpacity style={styles.removeAttachmentBadge} onPress={() => handleRemoveAttachment(idx)}>
+                <Ionicons name="close" size={12} color="#FFFFFF" />
+              </TouchableOpacity>
+            </View>
+          ))}
+        </ScrollView>
+      )}
+
       <View style={styles.composer}>
+        <TouchableOpacity
+          style={styles.attachButton}
+          onPress={() => setShowImagePickerOptions(true)}
+          accessibilityLabel="Anexar imagem"
+        >
+          <Ionicons name="camera-outline" size={22} color={theme.accent} />
+        </TouchableOpacity>
         <TextInput
           style={styles.input}
           placeholder="Mensagem…"
@@ -810,9 +914,9 @@ export default function SessionChatScreen() {
             resposta voltar, e só "destravava" se o usuário saísse e
             voltasse da tela — reportado como bug. */}
         <TouchableOpacity
-          style={[styles.sendButton, !draft.trim() && styles.sendButtonDisabled]}
+          style={[styles.sendButton, (!draft.trim() && attachments.length === 0) && styles.sendButtonDisabled]}
           onPress={handleSend}
-          disabled={!draft.trim()}
+          disabled={!draft.trim() && attachments.length === 0}
         >
           <Text style={styles.sendButtonText}>{sending ? 'Enfileirar' : 'Enviar'}</Text>
         </TouchableOpacity>
@@ -856,6 +960,28 @@ export default function SessionChatScreen() {
                 {mode === m && <Ionicons name="checkmark" size={18} color={theme.accent} />}
               </TouchableOpacity>
             ))}
+          </View>
+        </TouchableOpacity>
+      </Modal>
+
+      <Modal
+        visible={showImagePickerOptions}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowImagePickerOptions(false)}
+      >
+        <TouchableOpacity style={styles.modalBackdrop} activeOpacity={1} onPress={() => setShowImagePickerOptions(false)}>
+          <View style={styles.modalSheet}>
+            <View style={styles.modalGrabber} />
+            <Text style={[styles.modalTitle, { color: theme.text }]}>Anexar Imagem</Text>
+            <TouchableOpacity style={styles.modalOption} onPress={handleTakeImageWithCamera}>
+              <Ionicons name="camera-outline" size={20} color={theme.text} style={{ marginRight: 12 }} />
+              <Text style={[styles.modalOptionText, { color: theme.text }]}>Tirar Foto</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.modalOption} onPress={handlePickImageFromGallery}>
+              <Ionicons name="images-outline" size={20} color={theme.text} style={{ marginRight: 12 }} />
+              <Text style={[styles.modalOptionText, { color: theme.text }]}>Escolher da Galeria</Text>
+            </TouchableOpacity>
           </View>
         </TouchableOpacity>
       </Modal>
@@ -1247,6 +1373,62 @@ function createStyles(theme: Theme) {
       fontWeight: '700',
       color: theme.textFaint,
       textTransform: 'uppercase',
+    },
+    modalTitle: {
+      fontSize: 16,
+      fontWeight: '600',
+      marginBottom: 12,
+      marginHorizontal: 16,
+    },
+    attachButton: {
+      height: 38,
+      width: 38,
+      borderRadius: 19,
+      justifyContent: 'center',
+      alignItems: 'center',
+      backgroundColor: theme.bgAlt,
+    },
+    attachmentStrip: {
+      maxHeight: 70,
+      borderTopWidth: StyleSheet.hairlineWidth,
+      borderTopColor: theme.border,
+      backgroundColor: theme.bg,
+    },
+    attachmentStripContent: {
+      paddingHorizontal: 12,
+      paddingVertical: 8,
+      gap: 10,
+      flexDirection: 'row',
+    },
+    attachmentThumbWrapper: {
+      position: 'relative',
+      width: 52,
+      height: 52,
+    },
+    attachmentThumb: {
+      width: 52,
+      height: 52,
+      borderRadius: 8,
+    },
+    removeAttachmentBadge: {
+      position: 'absolute',
+      top: -4,
+      right: -4,
+      width: 18,
+      height: 18,
+      borderRadius: 9,
+      backgroundColor: 'rgba(0, 0, 0, 0.75)',
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
+    attachedImageWrapper: {
+      marginVertical: 4,
+    },
+    attachedImageMessage: {
+      width: 220,
+      height: 165,
+      borderRadius: 10,
+      backgroundColor: theme.bgAlt,
     },
     composer: {
       flexDirection: 'row',

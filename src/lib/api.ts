@@ -93,12 +93,27 @@ export type StepPart = {
   type: 'step-start' | 'step-finish';
 };
 
+export type FilePart = {
+  id: string;
+  messageID: string;
+  type: 'file';
+  mime: string;
+  url: string;
+  filename?: string;
+};
+
 export type Part =
   | TextPart
   | ReasoningPart
   | ToolPart
   | StepPart
+  | FilePart
   | { id: string; messageID: string; type: string };
+
+export type ImageAttachment = {
+  mime: string;
+  dataUrl: string;
+};
 
 export type MessageWithParts = {
   info: Message;
@@ -611,13 +626,24 @@ export async function sendPromptAsync(
   sessionID: string,
   text: string,
   agent?: string,
-  model?: SelectedModel
+  model?: SelectedModel,
+  attachments?: ImageAttachment[]
 ): Promise<void> {
+  const parts: unknown[] = [];
+  if (attachments && attachments.length > 0) {
+    for (const att of attachments) {
+      parts.push({ type: 'file', mime: att.mime, url: att.dataUrl });
+    }
+  }
+  if (text.trim()) {
+    parts.push({ type: 'text', text });
+  }
+
   const res = await fetch(authedUrl(server, token, `/session/${sessionID}/prompt_async`), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      parts: [{ type: 'text', text }],
+      parts,
       ...(agent ? { agent } : {}),
       ...(model ? { model: { modelID: model.modelID, providerID: model.providerID } } : {}),
     }),
@@ -637,13 +663,24 @@ export async function sendPrompt(
   sessionID: string,
   text: string,
   agent?: string,
-  model?: SelectedModel
+  model?: SelectedModel,
+  attachments?: ImageAttachment[]
 ): Promise<MessageWithParts> {
+  const parts: unknown[] = [];
+  if (attachments && attachments.length > 0) {
+    for (const att of attachments) {
+      parts.push({ type: 'file', mime: att.mime, url: att.dataUrl });
+    }
+  }
+  if (text.trim()) {
+    parts.push({ type: 'text', text });
+  }
+
   const res = await fetch(authedUrl(server, token, `/session/${sessionID}/message`), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      parts: [{ type: 'text', text }],
+      parts,
       ...(agent ? { agent } : {}),
       // Testado direto contra o servidor: o campo é `modelID`, não
       // `id` como uma pesquisa anterior (baseada no código do
