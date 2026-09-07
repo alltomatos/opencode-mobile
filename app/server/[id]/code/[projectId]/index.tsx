@@ -79,14 +79,20 @@ export default function ProjectSessionsScreen() {
     // trabalhando (aberto em outra aba/dispositivo) apareceria como
     // parado até o próximo evento chegar.
     getSessionStatusMap(server, token)
-      .then((data) => !cancelled && setStatusMap(data))
-      .catch(() => {});
+      .then((data) => {
+        // eslint-disable-next-line no-console
+        console.log('[debug] GET /session/status ->', JSON.stringify(data));
+        if (!cancelled) setStatusMap(data);
+      })
+      .catch((e) => console.log('[debug] GET /session/status falhou:', e));
 
     const controller = new AbortController();
     (async () => {
       try {
+        console.log('[debug] SSE conectada em', directory);
         for await (const event of subscribeEvents(server, token, controller.signal)) {
           if (cancelled) return;
+          console.log('[debug] evento SSE ->', event.type);
           if (event.type === 'session.created' || event.type === 'session.updated') {
             const info = (event as { properties: { info: Session } }).properties.info;
             if (info.directory !== directory || info.parentID) continue;
@@ -106,6 +112,7 @@ export default function ProjectSessionsScreen() {
           } else if (event.type === 'session.status') {
             const { sessionID, status } = (event as { properties: { sessionID: string; status: SessionStatus } })
               .properties;
+            console.log('[debug] session.status evento ->', sessionID, JSON.stringify(status));
             setStatusMap((prev) => ({ ...prev, [sessionID]: status }));
           }
         }
