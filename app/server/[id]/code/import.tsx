@@ -31,6 +31,7 @@ export default function ImportProjectScreen() {
   const [currentPath, setCurrentPath] = useState<string | null>(null);
   const [entries, setEntries] = useState<ProjectFolder[] | null>(null);
   const [loading, setLoading] = useState(false);
+  const [loadingPath, setLoadingPath] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -52,14 +53,23 @@ export default function ImportProjectScreen() {
     (directory: string) => {
       if (!server || !token) return;
       setLoading(true);
+      setLoadingPath(directory);
       setError(null);
-      listFolders(server, token, directory)
+      // Timeout generoso (não é um probe especulativo como listRoots, é
+      // uma pasta que o usuário escolheu de propósito) mas com limite —
+      // sem isso, um caminho que trava no servidor (ver comentário em
+      // listFolders) deixava a tela "presa" sem nenhum feedback: o toque
+      // mostrava o ripple e nada mais acontecia.
+      listFolders(server, token, directory, { timeoutMs: 15000 })
         .then((folders) => {
           setCurrentPath(directory);
           setEntries(folders.sort((a, b) => a.name.localeCompare(b.name)));
         })
         .catch((e) => setError(e instanceof Error ? e.message : 'Não consegui abrir essa pasta.'))
-        .finally(() => setLoading(false));
+        .finally(() => {
+          setLoading(false);
+          setLoadingPath(null);
+        });
     },
     [server, token],
   );
@@ -85,6 +95,8 @@ export default function ImportProjectScreen() {
                 iconColor={theme.textFaint}
                 title={r.label}
                 onPress={() => load(r.path)}
+                disabled={loading}
+                loading={loading && loadingPath === r.path}
                 last={i === roots.length - 1}
               />
             ))}
@@ -106,26 +118,30 @@ export default function ImportProjectScreen() {
               title=".."
               subtitle={parent ?? undefined}
               onPress={() => (parent ? load(parent) : setCurrentPath(null))}
-              accessory={
-                <ImportButton theme={theme} onPress={() => importPath(currentPath)} />
-              }
+              disabled={loading}
+              loading={loading && loadingPath === parent}
+              accessory={loading && loadingPath === parent ? undefined : <ImportButton theme={theme} onPress={() => importPath(currentPath)} />}
             />
-            {loading && <Row title="Carregando…" loading last />}
             {!loading && entries !== null && entries.length === 0 && (
               <Row icon="folder-outline" iconColor={theme.textFaint} title="Sem subpastas aqui" last />
             )}
-            {!loading &&
-              entries?.map((entry, i) => (
-                <Row
-                  key={entry.path}
-                  icon="folder-outline"
-                  iconColor="#5856d6"
-                  title={entry.name}
-                  onPress={() => load(entry.path)}
-                  last={i === entries.length - 1}
-                  accessory={<ImportButton theme={theme} onPress={() => importPath(entry.path)} />}
-                />
-              ))}
+            {entries?.map((entry, i) => (
+              <Row
+                key={entry.path}
+                icon="folder-outline"
+                iconColor="#5856d6"
+                title={entry.name}
+                onPress={() => load(entry.path)}
+                disabled={loading}
+                loading={loading && loadingPath === entry.path}
+                last={i === entries.length - 1}
+                accessory={
+                  loading && loadingPath === entry.path ? undefined : (
+                    <ImportButton theme={theme} onPress={() => importPath(entry.path)} />
+                  )
+                }
+              />
+            ))}
           </Section>
         )}
       </ScrollView>
