@@ -13,7 +13,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { WebView } from 'react-native-webview';
 
-import { useTheme } from '../../../src/lib/theme';
+import { useTheme } from '../../../../src/lib/theme';
 
 export default function SandboxScreen() {
   const { initialUrl } = useLocalSearchParams<{ initialUrl?: string }>();

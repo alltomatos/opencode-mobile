@@ -56,7 +56,7 @@ export default function ServerListScreen() {
               iconColor={theme.accent}
               title={item.label}
               subtitle={`${item.url} · ${describeConnection(item.url)}`}
-              onPress={() => router.push(`/server/${item.id}`)}
+              onPress={() => router.push(`/server/${item.id}/code`)}
               accessory={
                 <View style={styles.rowAccessory}>
                   <StatusDot health={health[item.id]} theme={theme} />

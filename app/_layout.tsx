@@ -9,10 +9,12 @@ import { syncNotificationChannels } from '../src/lib/notifications';
 import { SettingsContext, useSettings, useSettingsState } from '../src/lib/settings';
 import { useTheme } from '../src/lib/theme';
 
-// Sem tab bar: o app abre direto na lista de servidores, e
-// "Configurações" é uma tela por servidor (acessada de dentro do hub
-// dele, junto de Code/Batuta) — não uma aba global do app. Pedido
-// explícito do usuário depois de testar a versão com abas.
+// Sem tab bar NO NÍVEL DO APP: ele abre direto na lista de servidores
+// (pedido explícito do usuário depois de testar uma versão com abas
+// globais ali). Dentro de um servidor já pareado, porém, Code/Batuta/
+// Sandbox/Configurações agora SÃO uma tab bar (grupo `(tabs)`) — pedido
+// separado e mais recente do usuário, escopado a essa tela, não ao app
+// inteiro; ver server/[id]/(tabs)/_layout.tsx.
 function RootNavigator() {
   const theme = useTheme();
   const scheme = useColorScheme();
@@ -39,15 +41,13 @@ function RootNavigator() {
       >
         <Stack.Screen name="index" options={{ headerTitle: () => <BrandHeader theme={theme} /> }} />
         <Stack.Screen name="pair" options={{ title: 'Parear servidor', presentation: 'modal' }} />
-        <Stack.Screen name="server/[id]/index" options={{ title: 'Servidor' }} />
+        <Stack.Screen name="server/[id]/(tabs)" options={{ headerShown: false }} />
         <Stack.Screen name="server/[id]/edit" options={{ title: 'Editar servidor', presentation: 'modal' }} />
-        <Stack.Screen name="server/[id]/settings" options={{ title: 'Configurações' }} />
-        <Stack.Screen name="server/[id]/code/index" options={{ title: 'Projetos' }} />
         <Stack.Screen name="server/[id]/code/add" options={{ title: 'Adicionar projeto', presentation: 'modal' }} />
         <Stack.Screen name="server/[id]/code/import" options={{ title: 'Importar projeto', presentation: 'modal' }} />
         <Stack.Screen name="server/[id]/code/[projectId]/index" options={{ title: 'Sessões' }} />
         <Stack.Screen name="server/[id]/code/[projectId]/session/[sessionId]" options={{ title: 'Sessão' }} />
-        <Stack.Screen name="server/[id]/batuta/index" options={{ title: 'Batuta' }} />
+        <Stack.Screen name="server/[id]/batuta/[activityId]" options={{ title: 'Atividade' }} />
       </Stack>
     </SafeAreaProvider>
   );

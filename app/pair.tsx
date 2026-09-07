@@ -27,7 +27,7 @@ export default function PairScreen() {
         throw new Error('Servidor não respondeu — confira a URL e a rede.');
       }
       const server = await addServer(payload);
-      router.replace(`/server/${server.id}`);
+      router.replace(`/server/${server.id}/code`);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Payload inválido.');
       setStatus('error');

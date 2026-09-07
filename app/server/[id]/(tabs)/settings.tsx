@@ -1,11 +1,12 @@
 import { Ionicons } from '@expo/vector-icons';
 import Constants from 'expo-constants';
 import * as Linking from 'expo-linking';
-import { useLocalSearchParams } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import * as WebBrowser from 'expo-web-browser';
 import { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
+  Alert,
   Modal,
   Platform,
   ScrollView,
@@ -18,8 +19,9 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { Row } from '../../../src/components/ui/Row';
-import { Section } from '../../../src/components/ui/Section';
+import { StatusDot } from '../../../../src/components/StatusDot';
+import { Row } from '../../../../src/components/ui/Row';
+import { Section } from '../../../../src/components/ui/Section';
 import {
   getConfig,
   getMemoryConfig,
@@ -27,19 +29,32 @@ import {
   listProviders,
   ProviderCatalogItem,
   ProviderList,
+  ServerHealth,
   sendOAuthCallback,
   setMemoryConfig,
   startOAuthAuthorize,
   updateConfig,
-} from '../../../src/lib/api';
+} from '../../../../src/lib/api';
 import {
   getNotificationPermissionStatus,
   isNotificationSupportAvailable,
   requestNotificationPermission,
-} from '../../../src/lib/notifications';
-import { getServerToken, listServers, ServerConnection } from '../../../src/lib/servers';
-import { NotificationCategory, ThemeOverride, useSettings } from '../../../src/lib/settings';
-import { Theme, useTheme } from '../../../src/lib/theme';
+} from '../../../../src/lib/notifications';
+import { describeConnection, getServerToken, listServers, removeServer, ServerConnection } from '../../../../src/lib/servers';
+import { useServerHealth } from '../../../../src/lib/serverHealth';
+import { NotificationCategory, ThemeOverride, useSettings } from '../../../../src/lib/settings';
+import { Theme, useTheme } from '../../../../src/lib/theme';
+
+// `version` do servidor às vezes é literalmente "local" (build de dev,
+// sem número real) — visto ao vivo em GET /global/health. Só prefixa
+// "v" quando parece uma versão de verdade (começa com dígito).
+function healthLabel(health: ServerHealth | undefined, connectionType: string): string {
+  if (health === undefined) return 'Verificando…';
+  if (!health.healthy) return 'Offline';
+  const { version } = health;
+  const versionLabel = /^\d/.test(version) ? `v${version}` : `(${version})`;
+  return `Online · ${versionLabel} · ${connectionType}`;
+}
 
 const THEME_OPTIONS: { value: ThemeOverride; label: string }[] = [
   { value: 'system', label: 'Sistema' },
@@ -63,6 +78,21 @@ export default function SettingsScreen() {
   const notificationsSupported = isNotificationSupportAvailable();
   const [server, setServer] = useState<ServerConnection | null>(null);
   const [token, setToken] = useState<string | null>(null);
+  const health = useServerHealth(server ? [server] : []);
+  function confirmRemoveServer() {
+    if (!server) return;
+    Alert.alert('Remover servidor', `Isso só remove "${server.label}" da lista pareada — nada é apagado nele.`, [
+      { text: 'Cancelar', style: 'cancel' },
+      {
+        text: 'Remover',
+        style: 'destructive',
+        onPress: async () => {
+          await removeServer(server.id);
+          router.replace('/');
+        },
+      },
+    ]);
+  }
   // `null` = ainda não carregou; depois disso, `undefined` explícito
   // significa que o GET /memory falhou (servidor fora do ar, rota não
   // implementada nessa build, etc.) — nesse caso escondemos o toggle
@@ -220,6 +250,25 @@ export default function SettingsScreen() {
       contentContainerStyle={[styles.scroll, { paddingBottom: insets.bottom + 24 }]}
       contentInsetAdjustmentBehavior="automatic"
     >
+      {server && (
+        <Section title="Servidor">
+          <Row
+            icon="server-outline"
+            iconColor={theme.textFaint}
+            title={server.label}
+            subtitle={`${server.url} · ${healthLabel(health[server.id], describeConnection(server.url))}`}
+            accessory={<StatusDot health={health[server.id]} theme={theme} />}
+          />
+          <Row
+            icon="pencil-outline"
+            iconColor={theme.textFaint}
+            title="Editar servidor"
+            onPress={() => router.push(`/server/${id}/edit`)}
+          />
+          <Row title="Remover servidor" destructive onPress={confirmRemoveServer} last />
+        </Section>
+      )}
+
       <Section title="Aparência">
         <View style={styles.segmentedRow}>
           <View style={styles.segmented}>
