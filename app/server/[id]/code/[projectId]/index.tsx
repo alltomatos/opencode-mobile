@@ -292,6 +292,20 @@ export default function ProjectSessionsScreen() {
 
         <Section title="Gerenciar projeto">
           <Row
+            icon="play-circle-outline"
+            iconColor="#34c759"
+            title="Ver rodando (Sandbox 3D / Web)"
+            subtitle="Executa a aplicação gerada pelo agente em WebView WebGPU/WebGL2"
+            onPress={() => {
+              let host = 'localhost';
+              try {
+                if (server?.url) host = new URL(server.url).hostname;
+              } catch {}
+              const previewUrl = `http://${host}:3000`;
+              router.push(`/server/${id}/sandbox?initialUrl=${encodeURIComponent(previewUrl)}`);
+            }}
+          />
+          <Row
             icon="sparkles-outline"
             iconColor="#af52de"
             title="Memória deste projeto"

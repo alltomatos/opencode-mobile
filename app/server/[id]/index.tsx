@@ -120,6 +120,13 @@ export default function ServerHubScreen() {
           onPress={() => router.push(`/server/${id}/batuta`)}
         />
         <Row
+          icon="cube-outline"
+          iconColor="#34c759"
+          title="Sandbox (WebGPU / WebGL2)"
+          subtitle="Testar jogos 3D e apps gerados no celular"
+          onPress={() => router.push(`/server/${id}/sandbox`)}
+        />
+        <Row
           icon="settings-outline"
           iconColor={theme.textFaint}
           title="Configurações"

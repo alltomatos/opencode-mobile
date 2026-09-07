@@ -36,8 +36,8 @@
 | `E02` | Composer Completo e Experiência de Chat Paritária | [#2](https://github.com/alltomatos/opencode-mobile/issues/2) | `done` |
 | `E03` | Módulo Batuta Mobile — Orquestração Multi-agente | [#3](https://github.com/alltomatos/opencode-mobile/issues/3) | `done` |
 | `E04` | Módulo de Memória Cross-Sessão & Configurações Avançadas | [#4](https://github.com/alltomatos/opencode-mobile/issues/4) | `done` |
-| `E05` | Sandbox de Teste In-App (WebView WebGPU/WebGL2) | [#5](https://github.com/alltomatos/opencode-mobile/issues/5) | `ready` |
-| `E06` | Breniac Mobile — Assistente de Voz em Tempo Real & Acessibilidade Total | [#6](https://github.com/alltomatos/opencode-mobile/issues/6) | `todo` |
+| `E05` | Sandbox de Teste In-App (WebView WebGPU/WebGL2) | [#5](https://github.com/alltomatos/opencode-mobile/issues/5) | `done` |
+| `E06` | Breniac Mobile — Assistente de Voz em Tempo Real & Acessibilidade Total | [#6](https://github.com/alltomatos/opencode-mobile/issues/6) | `ready` |
 
 ---
 
@@ -105,4 +105,22 @@
   depends_on: [TASK-006]
   status: done
   concluido_em: "2026-09-07 02:15:00"
+
+- id: TASK-008
+  desc: "E05-S1: Instalação de react-native-webview & Tela de Sandbox In-App"
+  skill: /tdd
+  issue: "#13"
+  gap_ref: E05-S1
+  depends_on: [TASK-007]
+  status: done
+  concluido_em: "2026-09-07 02:30:00"
+
+- id: TASK-009
+  desc: "E05-S2: Integração do Botão 'Ver Rodando' no Hub e Sessão"
+  skill: /tdd
+  issue: "#14"
+  gap_ref: E05-S2
+  depends_on: [TASK-008]
+  status: done
+  concluido_em: "2026-09-07 02:40:00"
 ```
