@@ -116,6 +116,13 @@ export default function SessionChatScreen() {
   }>();
   const insets = useSafeAreaInsets();
   const listRef = useRef<FlatList>(null);
+  // `onContentSizeChange` dispara toda vez que o conteúdo muda de altura —
+  // inclusive quando uma atualização ao vivo (SSE) chega enquanto o
+  // usuário rolou pra cima pra ler o histórico. Sem isso, rolar pra cima
+  // "voltava sozinho" pro final a cada nova parte/mensagem chegando —
+  // reportado como comportamento de "mola". Só auto-rola quando o
+  // usuário já estava perto do final (senão ele não pediu isso).
+  const nearBottomRef = useRef(true);
   const theme = useTheme();
   const styles = createStyles(theme);
   const { settings } = useSettings();
@@ -607,6 +614,9 @@ export default function SessionChatScreen() {
     if ((!text && atts.length === 0) || !server || !token) return;
     setDraft('');
     setAttachments([]);
+    // Mandar mensagem sempre pula pro final, mesmo se o usuário estava
+    // lendo histórico mais acima — é o comportamento esperado de chat.
+    nearBottomRef.current = true;
     const item: QueuedPrompt = { text, atts };
     if (sending) {
       enqueue(item);
@@ -743,7 +753,15 @@ export default function SessionChatScreen() {
         contentContainerStyle={styles.listContent}
         data={messages}
         keyExtractor={(item) => item.info.id}
-        onContentSizeChange={() => listRef.current?.scrollToEnd({ animated: true })}
+        onContentSizeChange={() => {
+          if (nearBottomRef.current) listRef.current?.scrollToEnd({ animated: true });
+        }}
+        onScroll={(e) => {
+          const { contentOffset, contentSize, layoutMeasurement } = e.nativeEvent;
+          const distanceFromBottom = contentSize.height - (contentOffset.y + layoutMeasurement.height);
+          nearBottomRef.current = distanceFromBottom < 120;
+        }}
+        scrollEventThrottle={100}
         ListEmptyComponent={<Text style={styles.placeholder}>Sem mensagens ainda — comece a conversa.</Text>}
         renderItem={({ item }) => {
           const text = textOf(item);
