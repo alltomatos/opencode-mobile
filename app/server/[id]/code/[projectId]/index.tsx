@@ -241,7 +241,7 @@ export default function ProjectSessionsScreen() {
   return (
     <View style={styles.container}>
       <ScrollView
-        contentContainerStyle={[styles.scroll, { paddingBottom: insets.bottom + 96 }]}
+        contentContainerStyle={[styles.scroll, { paddingBottom: insets.bottom + 148 }]}
         contentInsetAdjustmentBehavior="automatic"
       >
         <View style={styles.header}>
@@ -313,39 +313,43 @@ export default function ProjectSessionsScreen() {
           </Section>
         )}
 
-        <View>
-          <Text style={styles.iconBarLabel}>GERENCIAR PROJETO</Text>
-          <View style={styles.iconBar}>
-            <IconMenuButton
-              icon="play-circle-outline"
-              color="#34c759"
-              label="Sandbox"
-              onPress={openSandbox}
-              theme={theme}
-            />
-            <IconMenuButton
-              icon="sparkles-outline"
-              color="#af52de"
-              label="Memória"
-              badge={hasMemory}
-              onPress={handleMemoryPress}
-              theme={theme}
-            />
-            <View style={styles.iconBarDivider} />
-            <IconMenuButton
-              icon="trash-outline"
-              color={theme.danger}
-              label="Apagar"
-              loading={deletingProject}
-              onPress={confirmDeleteProject}
-              theme={theme}
-            />
-          </View>
-        </View>
       </ScrollView>
 
+      {/* Fixo (não rola com a lista) — um projeto pode ter muitas
+          sessões, e a barra de gerenciar precisa continuar alcançável
+          sem rolar até o fim (reportado ao vivo). */}
+      <View style={[styles.iconBarWrap, { paddingBottom: insets.bottom + 8 }]}>
+        <Text style={styles.iconBarLabel}>GERENCIAR PROJETO</Text>
+        <View style={styles.iconBar}>
+          <IconMenuButton
+            icon="play-circle-outline"
+            color="#34c759"
+            label="Sandbox"
+            onPress={openSandbox}
+            theme={theme}
+          />
+          <IconMenuButton
+            icon="sparkles-outline"
+            color="#af52de"
+            label="Memória"
+            badge={hasMemory}
+            onPress={handleMemoryPress}
+            theme={theme}
+          />
+          <View style={styles.iconBarDivider} />
+          <IconMenuButton
+            icon="trash-outline"
+            color={theme.danger}
+            label="Apagar"
+            loading={deletingProject}
+            onPress={confirmDeleteProject}
+            theme={theme}
+          />
+        </View>
+      </View>
+
       <Pressable
-        style={[styles.fab, { bottom: insets.bottom + 20 }, creating && styles.fabDisabled]}
+        style={[styles.fab, { bottom: insets.bottom + FAB_BOTTOM_OFFSET }, creating && styles.fabDisabled]}
         onPress={handleNewSession}
         disabled={creating}
         accessibilityLabel="Nova sessão"
@@ -360,6 +364,10 @@ export default function ProjectSessionsScreen() {
     </View>
   );
 }
+
+// Altura aproximada da barra fixa (rótulo + botões + padding) — usada
+// pra flutuar o FAB por cima dela em vez de colado no botão Apagar.
+const FAB_BOTTOM_OFFSET = 116;
 
 // Barra compacta de ícones — substitui a antiga seção "Gerenciar
 // projeto" (linhas empilhadas com título+subtítulo cada) por 3 botões
@@ -492,6 +500,17 @@ function createStyles(theme: Theme) {
     },
     rowDeleteHit: {
       padding: 4,
+    },
+    iconBarWrap: {
+      position: 'absolute',
+      left: 0,
+      right: 0,
+      bottom: 0,
+      paddingHorizontal: 16,
+      paddingTop: 10,
+      borderTopWidth: StyleSheet.hairlineWidth,
+      borderTopColor: theme.border,
+      backgroundColor: theme.bg,
     },
     iconBarLabel: {
       fontSize: 13,
