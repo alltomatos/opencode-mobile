@@ -6,9 +6,9 @@
 
 ## Epics
 
-- [x] [**[E01] Fundação do App Mobile, Conexão Multisservidores & Importador de Projetos**](https://github.com/alltomatos/opencode-mobile/issues/1) — `in_progress`
+- [x] [**[E01] Fundação do App Mobile, Conexão Multisservidores & Importador de Projetos**](https://github.com/alltomatos/opencode-mobile/issues/1) — `done`
   - Estrutura Expo SDK 57, Expo Router, SecureStore multisservidores, leitor de QR Code, listagem e importação de projetos via `/home/opencode/projects`.
-- [ ] [**[E02] Composer Completo e Experiência de Chat Paritária**](https://github.com/alltomatos/opencode-mobile/issues/2) — `in_progress`
+- [x] [**[E02] Composer Completo e Experiência de Chat Paritária**](https://github.com/alltomatos/opencode-mobile/issues/2) — `done`
   - Anexo de imagem (câmera/galeria base64), seletor de modelos, modos de execução (`build`/`plan`/auto-reply), autocomplete de comandos `/` e adição de provedores (OAuth/API Key).
 - [ ] [**[E03] Módulo Batuta Mobile — Orquestração Multi-agente**](https://github.com/alltomatos/opencode-mobile/issues/3) — `todo`
   - Visualização de atividades Batuta (`GET /batuta`), acompanhamento de status em tempo real via SSE e ação de delegação orquestrador → worker.

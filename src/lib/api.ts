@@ -323,6 +323,73 @@ export async function listProviders(server: ServerConnection, token: string): Pr
   return (await res.json()) as ProviderList;
 }
 
+export type ProviderCatalogItem = {
+  id: string;
+  name: string;
+  env?: string[];
+  oauth?: boolean;
+};
+
+export async function listProviderCatalog(
+  server: ServerConnection,
+  token: string
+): Promise<Record<string, ProviderCatalogItem>> {
+  const res = await fetch(authedUrl(server, token, '/config/providers'));
+  if (!res.ok) {
+    throw new Error(`GET /config/providers falhou: ${res.status}`);
+  }
+  return (await res.json()) as Record<string, ProviderCatalogItem>;
+}
+
+export async function updateConfig(
+  server: ServerConnection,
+  token: string,
+  configPatch: Record<string, unknown>
+): Promise<void> {
+  const res = await fetch(authedUrl(server, token, '/config'), {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(configPatch),
+  });
+  if (!res.ok) {
+    throw new Error(`PATCH /config falhou: ${await errorDetail(res)}`);
+  }
+}
+
+export type OAuthAuthorizeResult = {
+  url: string;
+};
+
+export async function startOAuthAuthorize(
+  server: ServerConnection,
+  token: string,
+  providerID: string
+): Promise<OAuthAuthorizeResult> {
+  const res = await fetch(authedUrl(server, token, `/provider/${providerID}/oauth/authorize`), {
+    method: 'POST',
+  });
+  if (!res.ok) {
+    throw new Error(`POST /provider/${providerID}/oauth/authorize falhou: ${await errorDetail(res)}`);
+  }
+  return (await res.json()) as OAuthAuthorizeResult;
+}
+
+export async function sendOAuthCallback(
+  server: ServerConnection,
+  token: string,
+  providerID: string,
+  callbackUrl: string
+): Promise<void> {
+  const res = await fetch(authedUrl(server, token, `/provider/${providerID}/oauth/callback`), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ url: callbackUrl }),
+  });
+  if (!res.ok) {
+    throw new Error(`POST /provider/${providerID}/oauth/callback falhou: ${await errorDetail(res)}`);
+  }
+}
+
 export async function listAgents(server: ServerConnection, token: string): Promise<Agent[]> {
   const res = await fetch(authedUrl(server, token, '/agent'));
   if (!res.ok) {
