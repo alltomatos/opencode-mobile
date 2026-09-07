@@ -58,7 +58,8 @@
   issue: "#7"
   gap_ref: E02-S1
   depends_on: [TASK-001]
-  status: ready
+  status: done
+  concluido_em: "2026-09-07 00:50:00"
 
 - id: TASK-003
   desc: "E02-S2: Fluxo de Adição e Autenticação de Provedores de IA"
@@ -66,5 +67,5 @@
   issue: "#8"
   gap_ref: E02-S2
   depends_on: [TASK-002]
-  status: pending
+  status: ready
 ```
