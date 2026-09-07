@@ -52,9 +52,23 @@ export default function SandboxScreen() {
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
       <View style={styles.header}>
-        <TouchableOpacity style={styles.headerBtn} onPress={() => router.back()}>
-          <Ionicons name="close" size={22} color={theme.text} />
-        </TouchableOpacity>
+        {/* Sandbox agora é uma aba fixa, não só uma tela empurrada pelo
+            botão "Ver rodando" do projeto — chegando aqui direto pela
+            barra de abas não existe "voltar" de verdade, e chamar
+            router.back() sem ter pra onde ir estourava a pilha de
+            navegação, deixando a próxima aba em branco (reportado ao
+            vivo). Só mostra/usa o X quando há de fato uma tela anterior
+            pra fechar de volta. */}
+        {router.canGoBack() && (
+          <TouchableOpacity
+            style={styles.headerBtn}
+            onPress={() => {
+              if (router.canGoBack()) router.back();
+            }}
+          >
+            <Ionicons name="close" size={22} color={theme.text} />
+          </TouchableOpacity>
+        )}
 
         <View style={styles.addressBar}>
           <Ionicons name="globe-outline" size={16} color={theme.textFaint} />
