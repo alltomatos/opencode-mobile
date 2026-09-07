@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { EmptyState } from '../../../../src/components/ui/EmptyState';
@@ -36,6 +36,18 @@ export default function ProjectListScreen() {
       .then(setProjects)
       .catch((e) => setError(e instanceof Error ? e.message : 'Falha ao listar projetos.'));
   }, [server, token]);
+
+  // Um FAB só, oferecendo os dois jeitos de trazer um projeto — pasta
+  // nova ou importar uma que já existe no disco do servidor — em vez de
+  // dois botões fixos no rodapé (pedido explícito do usuário, mesmo
+  // padrão do FAB já usado na tela de sessões).
+  function handleAddPress() {
+    Alert.alert('Adicionar projeto', undefined, [
+      { text: 'Cancelar', style: 'cancel' },
+      { text: 'Importar projeto existente', onPress: () => router.push(`/server/${id}/code/import`) },
+      { text: 'Pasta nova / Clonar do GitHub', onPress: () => router.push(`/server/${id}/code/add`) },
+    ]);
+  }
 
   if (!server || projects === null) {
     return <View style={styles.container} />;
@@ -73,24 +85,14 @@ export default function ProjectListScreen() {
         )}
       </ScrollView>
 
-      <View style={[styles.footer, { paddingBottom: insets.bottom + 12 }]}>
-        <View style={styles.footerCard}>
-          <Row
-            icon="add"
-            iconColor={theme.accent}
-            title="Adicionar projeto"
-            onPress={() => router.push(`/server/${id}/code/add`)}
-          />
-          <Row
-            icon="folder-open-outline"
-            iconColor={theme.accent}
-            title="Importar projeto existente"
-            subtitle="Uma pasta que já existe no computador do servidor"
-            onPress={() => router.push(`/server/${id}/code/import`)}
-            last
-          />
-        </View>
-      </View>
+      <Pressable
+        style={[styles.fab, { bottom: insets.bottom + 20 }]}
+        onPress={handleAddPress}
+        accessibilityLabel="Adicionar projeto"
+        accessibilityRole="button"
+      >
+        <Ionicons name="add" size={28} color={theme.accentText} />
+      </Pressable>
     </View>
   );
 }
@@ -103,6 +105,7 @@ function createStyles(theme: Theme) {
     },
     scroll: {
       padding: 16,
+      paddingBottom: 96,
       gap: 20,
       flexGrow: 1,
     },
@@ -119,17 +122,20 @@ function createStyles(theme: Theme) {
       color: theme.danger,
       fontSize: 13,
     },
-    footer: {
-      paddingHorizontal: 16,
-      paddingTop: 8,
-      borderTopWidth: StyleSheet.hairlineWidth,
-      borderTopColor: theme.border,
-      backgroundColor: theme.bg,
-    },
-    footerCard: {
-      backgroundColor: theme.surface,
-      borderRadius: 10,
-      overflow: 'hidden',
+    fab: {
+      position: 'absolute',
+      right: 20,
+      width: 56,
+      height: 56,
+      borderRadius: 28,
+      backgroundColor: theme.accent,
+      alignItems: 'center',
+      justifyContent: 'center',
+      shadowColor: '#000',
+      shadowOpacity: 0.25,
+      shadowRadius: 10,
+      shadowOffset: { width: 0, height: 4 },
+      elevation: 6,
     },
   });
 }
