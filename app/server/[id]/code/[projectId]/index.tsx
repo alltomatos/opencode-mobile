@@ -5,7 +5,6 @@ import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Text, Text
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { EmptyState } from '../../../../../src/components/ui/EmptyState';
-import { PrimaryButton } from '../../../../../src/components/ui/Button';
 import { Row } from '../../../../../src/components/ui/Row';
 import { Section } from '../../../../../src/components/ui/Section';
 import {
@@ -194,27 +193,41 @@ export default function ProjectSessionsScreen() {
     );
   }
 
-  function confirmForgetMemory() {
+  async function forgetMemory() {
+    if (!server || !token) return;
+    try {
+      await deleteProjectMemory(server, token, directory);
+      setHasMemory(false);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Falha ao apagar memória do projeto.');
+    }
+  }
+
+  // Um só toque no ícone já mostra o status (ativa/vazia) e, se tiver
+  // algo salvo, oferece a opção de esquecer — evita um ícone extra só
+  // pra "Esquecer memória" na barra compacta.
+  function handleMemoryPress() {
+    if (!hasMemory) {
+      Alert.alert('Memória do projeto', 'Nenhuma memória guardada ainda.');
+      return;
+    }
     Alert.alert(
-      'Esquecer memória do projeto',
-      'Apaga tudo que o agente guardou como memória específica deste projeto. A memória global não é afetada.',
+      'Memória do projeto',
+      'O agente possui observações específicas salvas. A memória global não é afetada se você esquecer esta.',
       [
         { text: 'Cancelar', style: 'cancel' },
-        {
-          text: 'Esquecer',
-          style: 'destructive',
-          onPress: async () => {
-            if (!server || !token) return;
-            try {
-              await deleteProjectMemory(server, token, directory);
-              setHasMemory(false);
-            } catch (e) {
-              setError(e instanceof Error ? e.message : 'Falha ao apagar memória do projeto.');
-            }
-          },
-        },
+        { text: 'Esquecer memória', style: 'destructive', onPress: forgetMemory },
       ]
     );
+  }
+
+  function openSandbox() {
+    let host = 'localhost';
+    try {
+      if (server?.url) host = new URL(server.url).hostname;
+    } catch {}
+    const previewUrl = `http://${host}:3000`;
+    router.push(`/server/${id}/sandbox?initialUrl=${encodeURIComponent(previewUrl)}`);
   }
 
   if (!server || sessions === null) {
@@ -227,7 +240,10 @@ export default function ProjectSessionsScreen() {
 
   return (
     <View style={styles.container}>
-      <ScrollView contentContainerStyle={styles.scroll} contentInsetAdjustmentBehavior="automatic">
+      <ScrollView
+        contentContainerStyle={[styles.scroll, { paddingBottom: insets.bottom + 96 }]}
+        contentInsetAdjustmentBehavior="automatic"
+      >
         <View style={styles.header}>
           <Text style={styles.title}>{projectName}</Text>
           <Text style={styles.subtitle}>{directory}</Text>
@@ -297,66 +313,125 @@ export default function ProjectSessionsScreen() {
           </Section>
         )}
 
-        <Section title="Gerenciar projeto">
-          <Row
-            icon="play-circle-outline"
-            iconColor="#34c759"
-            title="Ver rodando (Sandbox 3D / Web)"
-            subtitle="Executa a aplicação gerada pelo agente em WebView WebGPU/WebGL2"
-            onPress={() => {
-              let host = 'localhost';
-              try {
-                if (server?.url) host = new URL(server.url).hostname;
-              } catch {}
-              const previewUrl = `http://${host}:3000`;
-              router.push(`/server/${id}/sandbox?initialUrl=${encodeURIComponent(previewUrl)}`);
-            }}
-          />
-          <Row
-            icon="sparkles-outline"
-            iconColor="#af52de"
-            title="Memória deste projeto"
-            subtitle={hasMemory ? 'O agente possui observações específicas salvas' : 'Nenhuma memória guardada ainda'}
-            accessory={
-              hasMemory ? (
-                <View style={styles.memoryBadgeActive}>
-                  <Text style={styles.memoryBadgeTextActive}>Ativa</Text>
-                </View>
-              ) : (
-                <View style={styles.memoryBadgeEmpty}>
-                  <Text style={styles.memoryBadgeTextEmpty}>Vazia</Text>
-                </View>
-              )
-            }
-          />
-          {hasMemory && (
-            <Row
-              icon="trash-outline"
-              iconColor="#af52de"
-              title="Esquecer memória do projeto"
-              subtitle="Limpa as observações de memória deste projeto no servidor"
-              destructive
-              onPress={confirmForgetMemory}
+        <View>
+          <Text style={styles.iconBarLabel}>GERENCIAR PROJETO</Text>
+          <View style={styles.iconBar}>
+            <IconMenuButton
+              icon="play-circle-outline"
+              color="#34c759"
+              label="Sandbox"
+              onPress={openSandbox}
+              theme={theme}
             />
-          )}
-          <Row
-            icon="trash-outline"
-            iconColor={theme.danger}
-            title="Apagar projeto"
-            subtitle="Remove a pasta do disco e todo o histórico de sessões"
-            destructive
-            onPress={confirmDeleteProject}
-            loading={deletingProject}
-            last
-          />
-        </Section>
+            <IconMenuButton
+              icon="sparkles-outline"
+              color="#af52de"
+              label="Memória"
+              badge={hasMemory}
+              onPress={handleMemoryPress}
+              theme={theme}
+            />
+            <View style={styles.iconBarDivider} />
+            <IconMenuButton
+              icon="trash-outline"
+              color={theme.danger}
+              label="Apagar"
+              loading={deletingProject}
+              onPress={confirmDeleteProject}
+              theme={theme}
+            />
+          </View>
+        </View>
       </ScrollView>
 
-      <View style={[styles.footer, { paddingBottom: insets.bottom + 12 }]}>
-        <PrimaryButton title={creating ? 'Criando…' : '+ Nova sessão'} onPress={handleNewSession} loading={creating} />
-      </View>
+      <Pressable
+        style={[styles.fab, { bottom: insets.bottom + 20 }, creating && styles.fabDisabled]}
+        onPress={handleNewSession}
+        disabled={creating}
+        accessibilityLabel="Nova sessão"
+        accessibilityRole="button"
+      >
+        {creating ? (
+          <ActivityIndicator color={theme.accentText} />
+        ) : (
+          <Ionicons name="add" size={28} color={theme.accentText} />
+        )}
+      </Pressable>
     </View>
   );
+}
+
+// Barra compacta de ícones — substitui a antiga seção "Gerenciar
+// projeto" (linhas empilhadas com título+subtítulo cada) por 3 botões
+// lado a lado, ícone + rótulo curto. A ação destrutiva (Apagar) fica
+// separada por um divisor vertical (ui-ux-pro-max
+// `destructive-nav-separation`) em vez de só mudar de cor.
+function IconMenuButton({
+  icon,
+  color,
+  label,
+  badge,
+  loading,
+  onPress,
+  theme,
+}: {
+  icon: keyof typeof Ionicons.glyphMap;
+  color: string;
+  label: string;
+  badge?: boolean;
+  loading?: boolean;
+  onPress: () => void;
+  theme: Theme;
+}) {
+  const styles = createIconMenuStyles(theme);
+  return (
+    <Pressable style={styles.button} onPress={onPress} disabled={loading} hitSlop={4}>
+      <View style={[styles.iconWrap, { backgroundColor: `${color}26` }]}>
+        {loading ? (
+          <ActivityIndicator size="small" color={color} />
+        ) : (
+          <Ionicons name={icon} size={22} color={color} />
+        )}
+        {badge && <View style={[styles.badgeDot, { backgroundColor: color }]} />}
+      </View>
+      <Text style={styles.label} numberOfLines={1}>
+        {label}
+      </Text>
+    </Pressable>
+  );
+}
+
+function createIconMenuStyles(theme: Theme) {
+  return StyleSheet.create({
+    button: {
+      flex: 1,
+      alignItems: 'center',
+      gap: 6,
+      paddingVertical: 12,
+    },
+    iconWrap: {
+      width: 44,
+      height: 44,
+      borderRadius: 12,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    badgeDot: {
+      position: 'absolute',
+      top: -1,
+      right: -1,
+      width: 9,
+      height: 9,
+      borderRadius: 5,
+      borderWidth: 2,
+      borderColor: theme.surface,
+    },
+    label: {
+      fontSize: 11,
+      fontWeight: '600',
+      color: theme.textDim,
+    },
+  });
 }
 
 function createStyles(theme: Theme) {
@@ -418,34 +493,45 @@ function createStyles(theme: Theme) {
     rowDeleteHit: {
       padding: 4,
     },
-    memoryBadgeActive: {
-      backgroundColor: 'rgba(175, 82, 222, 0.15)',
+    iconBarLabel: {
+      fontSize: 13,
+      fontWeight: '400',
+      color: theme.textDim,
+      textTransform: 'uppercase',
+      letterSpacing: 0.2,
+      paddingHorizontal: 4,
+      marginBottom: 7,
+    },
+    iconBar: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      backgroundColor: theme.surface,
+      borderRadius: 14,
       paddingHorizontal: 8,
-      paddingVertical: 3,
-      borderRadius: 6,
     },
-    memoryBadgeTextActive: {
-      fontSize: 12,
-      fontWeight: '600',
-      color: '#af52de',
+    iconBarDivider: {
+      width: StyleSheet.hairlineWidth,
+      alignSelf: 'stretch',
+      marginVertical: 12,
+      backgroundColor: theme.border,
     },
-    memoryBadgeEmpty: {
-      backgroundColor: theme.bgAlt,
-      paddingHorizontal: 8,
-      paddingVertical: 3,
-      borderRadius: 6,
+    fab: {
+      position: 'absolute',
+      right: 20,
+      width: 56,
+      height: 56,
+      borderRadius: 28,
+      backgroundColor: theme.accent,
+      alignItems: 'center',
+      justifyContent: 'center',
+      shadowColor: '#000',
+      shadowOpacity: 0.25,
+      shadowRadius: 10,
+      shadowOffset: { width: 0, height: 4 },
+      elevation: 6,
     },
-    memoryBadgeTextEmpty: {
-      fontSize: 12,
-      fontWeight: '600',
-      color: theme.textFaint,
-    },
-    footer: {
-      paddingHorizontal: 16,
-      paddingTop: 8,
-      borderTopWidth: StyleSheet.hairlineWidth,
-      borderTopColor: theme.border,
-      backgroundColor: theme.bg,
+    fabDisabled: {
+      opacity: 0.6,
     },
   });
 }
