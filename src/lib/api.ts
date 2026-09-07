@@ -356,6 +356,14 @@ export async function updateConfig(
   }
 }
 
+export async function getConfig(server: ServerConnection, token: string): Promise<Record<string, unknown>> {
+  const res = await fetch(authedUrl(server, token, '/config'));
+  if (!res.ok) {
+    throw new Error(`GET /config falhou: ${res.status}`);
+  }
+  return (await res.json()) as Record<string, unknown>;
+}
+
 export type OAuthAuthorizeResult = {
   url: string;
 };

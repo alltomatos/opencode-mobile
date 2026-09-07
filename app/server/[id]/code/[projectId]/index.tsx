@@ -291,12 +291,30 @@ export default function ProjectSessionsScreen() {
         )}
 
         <Section title="Gerenciar projeto">
+          <Row
+            icon="sparkles-outline"
+            iconColor="#af52de"
+            title="Memória deste projeto"
+            subtitle={hasMemory ? 'O agente possui observações específicas salvas' : 'Nenhuma memória guardada ainda'}
+            accessory={
+              hasMemory ? (
+                <View style={styles.memoryBadgeActive}>
+                  <Text style={styles.memoryBadgeTextActive}>Ativa</Text>
+                </View>
+              ) : (
+                <View style={styles.memoryBadgeEmpty}>
+                  <Text style={styles.memoryBadgeTextEmpty}>Vazia</Text>
+                </View>
+              )
+            }
+          />
           {hasMemory && (
             <Row
-              icon="sparkles-outline"
+              icon="trash-outline"
               iconColor="#af52de"
               title="Esquecer memória do projeto"
-              subtitle="O agente guardou observações específicas deste projeto"
+              subtitle="Limpa as observações de memória deste projeto no servidor"
+              destructive
               onPress={confirmForgetMemory}
             />
           )}
@@ -378,6 +396,28 @@ function createStyles(theme: Theme) {
     },
     rowDeleteHit: {
       padding: 4,
+    },
+    memoryBadgeActive: {
+      backgroundColor: 'rgba(175, 82, 222, 0.15)',
+      paddingHorizontal: 8,
+      paddingVertical: 3,
+      borderRadius: 6,
+    },
+    memoryBadgeTextActive: {
+      fontSize: 12,
+      fontWeight: '600',
+      color: '#af52de',
+    },
+    memoryBadgeEmpty: {
+      backgroundColor: theme.bgAlt,
+      paddingHorizontal: 8,
+      paddingVertical: 3,
+      borderRadius: 6,
+    },
+    memoryBadgeTextEmpty: {
+      fontSize: 12,
+      fontWeight: '600',
+      color: theme.textFaint,
     },
     footer: {
       paddingHorizontal: 16,

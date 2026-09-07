@@ -21,6 +21,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Row } from '../../../src/components/ui/Row';
 import { Section } from '../../../src/components/ui/Section';
 import {
+  getConfig,
   getMemoryConfig,
   listProviderCatalog,
   listProviders,
@@ -67,6 +68,14 @@ export default function SettingsScreen() {
   // implementada nessa build, etc.) — nesse caso escondemos o toggle
   // em vez de mostrar um estado que pode estar errado.
   const [memoryEnabled, setMemoryEnabled] = useState<boolean | null | undefined>(null);
+  const [memoryModel, setMemoryModel] = useState<string>('');
+  const [serverConfig, setServerConfig] = useState<Record<string, unknown> | null>(null);
+  const [showMemoryModelModal, setShowMemoryModelModal] = useState(false);
+  const [showAdvancedConfigModal, setShowAdvancedConfigModal] = useState(false);
+  const [rawConfigJson, setRawConfigJson] = useState('');
+  const [savingConfig, setSavingConfig] = useState(false);
+  const [configError, setConfigError] = useState<string | null>(null);
+
   const [providers, setProviders] = useState<ProviderList | null>(null);
   const [catalog, setCatalog] = useState<Record<string, ProviderCatalogItem> | null>(null);
   const [showAddProviderModal, setShowAddProviderModal] = useState(false);
@@ -89,12 +98,45 @@ export default function SettingsScreen() {
       setToken(t);
       if (!t) return;
       getMemoryConfig(found, t)
-        .then((config) => setMemoryEnabled(config.enabled !== false))
+        .then((config) => {
+          setMemoryEnabled(config.enabled !== false);
+          if (config.memoryModel) setMemoryModel(config.memoryModel);
+        })
         .catch(() => setMemoryEnabled(undefined));
       listProviders(found, t).then(setProviders).catch(() => {});
       listProviderCatalog(found, t).then(setCatalog).catch(() => {});
+      getConfig(found, t).then(setServerConfig).catch(() => {});
     });
   }, [id]);
+
+  async function handleSaveMemoryModel(modelName: string) {
+    if (!server || !token) return;
+    const old = memoryModel;
+    setMemoryModel(modelName);
+    setShowMemoryModelModal(false);
+    try {
+      await setMemoryConfig(server, token, { memoryModel: modelName });
+    } catch {
+      setMemoryModel(old);
+    }
+  }
+
+  async function handleSaveRawConfig() {
+    if (!server || !token || !rawConfigJson.trim()) return;
+    setSavingConfig(true);
+    setConfigError(null);
+    try {
+      const parsed = JSON.parse(rawConfigJson);
+      await updateConfig(server, token, parsed);
+      setShowAdvancedConfigModal(false);
+      const fresh = await getConfig(server, token);
+      setServerConfig(fresh);
+    } catch (e) {
+      setConfigError(e instanceof Error ? e.message : 'JSON de configuração inválido ou falha ao salvar.');
+    } finally {
+      setSavingConfig(false);
+    }
+  }
 
   async function refreshProviders() {
     if (!server || !token) return;
@@ -263,10 +305,36 @@ export default function SettingsScreen() {
                 trackColor={{ true: theme.accent, false: theme.border }}
               />
             }
-            last
+            last={!memoryEnabled}
           />
+          {memoryEnabled && (
+            <Row
+              title="Modelo de Memória"
+              subtitle={memoryModel ? `Modelo ativo: ${memoryModel}` : 'Usando modelo padrão do servidor'}
+              accessory={<Ionicons name="chevron-forward" size={18} color={theme.textFaint} />}
+              onPress={() => setShowMemoryModelModal(true)}
+              last
+            />
+          )}
         </Section>
       )}
+
+      <Section
+        title="Configurações Avançadas"
+        footer="Parâmetros globais de configuração do servidor OpenCode (GET/PATCH /config)."
+      >
+        <Row
+          title="Editar Configuração do Servidor (JSON)"
+          subtitle={serverConfig ? `${Object.keys(serverConfig).length} chaves configuradas` : 'Visualizar / Editar'}
+          accessory={<Ionicons name="create-outline" size={20} color={theme.accent} />}
+          onPress={() => {
+            setRawConfigJson(JSON.stringify(serverConfig ?? {}, null, 2));
+            setConfigError(null);
+            setShowAdvancedConfigModal(true);
+          }}
+          last
+        />
+      </Section>
 
       <Section
         title="Notificações"
@@ -391,7 +459,96 @@ export default function SettingsScreen() {
                       <Ionicons name="chevron-forward" size={18} color={theme.textFaint} />
                     </TouchableOpacity>
                   ))}
-              </ScrollView>
+      <Modal
+        visible={showMemoryModelModal}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowMemoryModelModal(false)}
+      >
+        <TouchableOpacity
+          style={styles.modalBackdrop}
+          activeOpacity={1}
+          onPress={() => setShowMemoryModelModal(false)}
+        >
+          <View style={styles.modalSheet} onStartShouldSetResponder={() => true}>
+            <View style={styles.modalGrabber} />
+            <Text style={styles.modalTitle}>Modelo de Memória</Text>
+            <ScrollView style={styles.catalogScroll}>
+              {providers?.all.flatMap((p) => Object.values(p.models)).map((mod) => {
+                const active = memoryModel === mod.id || memoryModel === `${mod.providerID}/${mod.id}`;
+                return (
+                  <TouchableOpacity
+                    key={`${mod.providerID}-${mod.id}`}
+                    style={styles.catalogRow}
+                    onPress={() => handleSaveMemoryModel(mod.id)}
+                  >
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.catalogName}>{mod.name || mod.id}</Text>
+                      <Text style={styles.catalogSubtitle}>Provedor: {mod.providerID}</Text>
+                    </View>
+                    {active && <Ionicons name="checkmark" size={18} color={theme.accent} />}
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+          </View>
+        </TouchableOpacity>
+      </Modal>
+
+      <Modal
+        visible={showAdvancedConfigModal}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowAdvancedConfigModal(false)}
+      >
+        <TouchableOpacity
+          style={styles.modalBackdrop}
+          activeOpacity={1}
+          onPress={() => setShowAdvancedConfigModal(false)}
+        >
+          <View style={styles.modalSheet} onStartShouldSetResponder={() => true}>
+            <View style={styles.modalGrabber} />
+            <Text style={styles.modalTitle}>Configuração do Servidor (JSON)</Text>
+
+            {configError && (
+              <View style={styles.errorBox}>
+                <Text style={styles.errorText}>{configError}</Text>
+              </View>
+            )}
+
+            <TextInput
+              style={[styles.apiKeyInput, { height: 180, textAlignVertical: 'top', fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace' }]}
+              multiline
+              value={rawConfigJson}
+              onChangeText={setRawConfigJson}
+              autoCapitalize="none"
+              autoCorrect={false}
+            />
+
+            <View style={styles.formBtnRow}>
+              <TouchableOpacity
+                style={styles.cancelBtn}
+                onPress={() => setShowAdvancedConfigModal(false)}
+                disabled={savingConfig}
+              >
+                <Text style={styles.cancelBtnText}>Cancelar</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.saveBtn}
+                onPress={handleSaveRawConfig}
+                disabled={savingConfig}
+              >
+                {savingConfig ? (
+                  <ActivityIndicator color={theme.accentText} size="small" />
+                ) : (
+                  <Text style={styles.saveBtnText}>Salvar JSON</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </TouchableOpacity>
+      </Modal>
+    </ScrollView>
             ) : (
               <View style={styles.apiKeyForm}>
                 <Text style={styles.catalogName}>{selectedCatalogItem.name}</Text>

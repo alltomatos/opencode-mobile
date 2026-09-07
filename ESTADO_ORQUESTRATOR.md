@@ -35,8 +35,8 @@
 | `E01` | Fundação do App Mobile, Conexão Multisservidores & Importador de Projetos | [#1](https://github.com/alltomatos/opencode-mobile/issues/1) | `done` |
 | `E02` | Composer Completo e Experiência de Chat Paritária | [#2](https://github.com/alltomatos/opencode-mobile/issues/2) | `done` |
 | `E03` | Módulo Batuta Mobile — Orquestração Multi-agente | [#3](https://github.com/alltomatos/opencode-mobile/issues/3) | `done` |
-| `E04` | Módulo de Memória Cross-Sessão & Configurações Avançadas | [#4](https://github.com/alltomatos/opencode-mobile/issues/4) | `ready` |
-| `E05` | Sandbox de Teste In-App (WebView WebGPU/WebGL2) | [#5](https://github.com/alltomatos/opencode-mobile/issues/5) | `todo` |
+| `E04` | Módulo de Memória Cross-Sessão & Configurações Avançadas | [#4](https://github.com/alltomatos/opencode-mobile/issues/4) | `done` |
+| `E05` | Sandbox de Teste In-App (WebView WebGPU/WebGL2) | [#5](https://github.com/alltomatos/opencode-mobile/issues/5) | `ready` |
 | `E06` | Breniac Mobile — Assistente de Voz em Tempo Real & Acessibilidade Total | [#6](https://github.com/alltomatos/opencode-mobile/issues/6) | `todo` |
 
 ---
@@ -87,4 +87,22 @@
   depends_on: [TASK-004]
   status: done
   concluido_em: "2026-09-07 01:40:00"
+
+- id: TASK-006
+  desc: "E04-S1: Gerenciamento e Exclusão de Memória por Projeto"
+  skill: /tdd
+  issue: "#11"
+  gap_ref: E04-S1
+  depends_on: [TASK-005]
+  status: done
+  concluido_em: "2026-09-07 02:00:00"
+
+- id: TASK-007
+  desc: "E04-S2: Modelo de Memória & Edição de Configurações Avançadas do Servidor"
+  skill: /tdd
+  issue: "#12"
+  gap_ref: E04-S2
+  depends_on: [TASK-006]
+  status: done
+  concluido_em: "2026-09-07 02:15:00"
 ```
