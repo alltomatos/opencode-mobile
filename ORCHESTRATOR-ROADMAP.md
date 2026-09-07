@@ -10,8 +10,8 @@
   - Estrutura Expo SDK 57, Expo Router, SecureStore multisservidores, leitor de QR Code, listagem e importação de projetos via `/home/opencode/projects`.
 - [x] [**[E02] Composer Completo e Experiência de Chat Paritária**](https://github.com/alltomatos/opencode-mobile/issues/2) — `done`
   - Anexo de imagem (câmera/galeria base64), seletor de modelos, modos de execução (`build`/`plan`/auto-reply), autocomplete de comandos `/` e adição de provedores (OAuth/API Key).
-- [ ] [**[E03] Módulo Batuta Mobile — Orquestração Multi-agente**](https://github.com/alltomatos/opencode-mobile/issues/3) — `todo`
-  - Visualização de atividades Batuta (`GET /batuta`), acompanhamento de status em tempo real via SSE e ação de delegação orquestrador → worker.
+- [x] [**[E03] Módulo Batuta Mobile — Orquestração Multi-agente**](https://github.com/alltomatos/opencode-mobile/issues/3) — `done`
+  - Visualização de atividades Batuta (`GET /batuta`), criação/exclusão, tela de detalhes e ações de delegação orquestrador → worker (`start`, `delegate`, `dispatch`).
 - [ ] [**[E04] Módulo de Memória Cross-Sessão & Configurações Avançadas**](https://github.com/alltomatos/opencode-mobile/issues/4) — `todo`
   - Gerenciamento de memória cross-sessão global e por projeto (`/memory`) e ajuste de parâmetros de configuração do servidor (`/config`).
 - [ ] [**[E05] Sandbox de Teste In-App (WebView WebGPU/WebGL2)**](https://github.com/alltomatos/opencode-mobile/issues/5) — `todo`

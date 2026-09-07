@@ -880,7 +880,90 @@ export async function rejectQuestion(server: ServerConnection, token: string, re
   }
 }
 
-// Sistema de memória (packages/opencode/src/memory/index.ts) — guarda
+// Rotas de Batuta (packages/opencode/src/server/routes/instance/httpapi/groups/batuta.ts)
+export type BatutaActivityStatus = 'pending' | 'in_progress' | 'completed' | 'failed' | 'canceled';
+
+export type BatutaActivity = {
+  id: string;
+  name: string;
+  status: BatutaActivityStatus;
+  directory?: string;
+  branch?: string;
+  orchestratorSessionID?: string;
+  workerSessionID?: string;
+  pipeline?: string;
+  time?: {
+    created: number;
+    updated?: number;
+  };
+};
+
+export async function listBatutaActivities(server: ServerConnection, token: string): Promise<BatutaActivity[]> {
+  const res = await fetch(authedUrl(server, token, '/batuta'));
+  if (!res.ok) {
+    throw new Error(`GET /batuta falhou: ${res.status}`);
+  }
+  return (await res.json()) as BatutaActivity[];
+}
+
+export async function createBatutaActivity(
+  server: ServerConnection,
+  token: string,
+  data: { name: string; directory?: string; branch?: string; pipeline?: string }
+): Promise<BatutaActivity> {
+  const res = await fetch(authedUrl(server, token, '/batuta'), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) {
+    throw new Error(`POST /batuta falhou: ${await errorDetail(res)}`);
+  }
+  return (await res.json()) as BatutaActivity;
+}
+
+export async function deleteBatutaActivity(server: ServerConnection, token: string, id: string): Promise<void> {
+  const res = await fetch(authedUrl(server, token, `/batuta/${id}`), {
+    method: 'DELETE',
+  });
+  if (!res.ok) {
+    throw new Error(`DELETE /batuta/${id} falhou: ${await errorDetail(res)}`);
+  }
+}
+
+export async function startBatutaActivity(server: ServerConnection, token: string, id: string): Promise<void> {
+  const res = await fetch(authedUrl(server, token, `/batuta/${id}/start`), {
+    method: 'POST',
+  });
+  if (!res.ok) {
+    throw new Error(`POST /batuta/${id}/start falhou: ${await errorDetail(res)}`);
+  }
+}
+
+export async function delegateBatutaActivity(
+  server: ServerConnection,
+  token: string,
+  id: string,
+  worker?: string
+): Promise<void> {
+  const res = await fetch(authedUrl(server, token, `/batuta/${id}/delegate`), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(worker ? { worker } : {}),
+  });
+  if (!res.ok) {
+    throw new Error(`POST /batuta/${id}/delegate falhou: ${await errorDetail(res)}`);
+  }
+}
+
+export async function dispatchBatutaActivity(server: ServerConnection, token: string, id: string): Promise<void> {
+  const res = await fetch(authedUrl(server, token, `/batuta/${id}/dispatch`), {
+    method: 'POST',
+  });
+  if (!res.ok) {
+    throw new Error(`POST /batuta/${id}/dispatch falhou: ${await errorDetail(res)}`);
+  }
+}
 // arquivos markdown em disco (global ou por projeto), NÃO tem API HTTP
 // pra listar/ver entradas individuais (confirmado: só o servidor lê via
 // as tools memory_search/memory_save). A API só permite: ligar/desligar

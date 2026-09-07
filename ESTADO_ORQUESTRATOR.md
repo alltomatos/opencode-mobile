@@ -34,8 +34,8 @@
 |---|---|---|---|
 | `E01` | Fundação do App Mobile, Conexão Multisservidores & Importador de Projetos | [#1](https://github.com/alltomatos/opencode-mobile/issues/1) | `done` |
 | `E02` | Composer Completo e Experiência de Chat Paritária | [#2](https://github.com/alltomatos/opencode-mobile/issues/2) | `done` |
-| `E03` | Módulo Batuta Mobile — Orquestração Multi-agente | [#3](https://github.com/alltomatos/opencode-mobile/issues/3) | `ready` |
-| `E04` | Módulo de Memória Cross-Sessão & Configurações Avançadas | [#4](https://github.com/alltomatos/opencode-mobile/issues/4) | `todo` |
+| `E03` | Módulo Batuta Mobile — Orquestração Multi-agente | [#3](https://github.com/alltomatos/opencode-mobile/issues/3) | `done` |
+| `E04` | Módulo de Memória Cross-Sessão & Configurações Avançadas | [#4](https://github.com/alltomatos/opencode-mobile/issues/4) | `ready` |
 | `E05` | Sandbox de Teste In-App (WebView WebGPU/WebGL2) | [#5](https://github.com/alltomatos/opencode-mobile/issues/5) | `todo` |
 | `E06` | Breniac Mobile — Assistente de Voz em Tempo Real & Acessibilidade Total | [#6](https://github.com/alltomatos/opencode-mobile/issues/6) | `todo` |
 
@@ -69,4 +69,22 @@
   depends_on: [TASK-002]
   status: done
   concluido_em: "2026-09-07 01:10:00"
+
+- id: TASK-004
+  desc: "E03-S1: Tipos da API Batuta & Tela de Listagem e Criação de Atividades"
+  skill: /tdd
+  issue: "#9"
+  gap_ref: E03-S1
+  depends_on: [TASK-003]
+  status: done
+  concluido_em: "2026-09-07 01:25:00"
+
+- id: TASK-005
+  desc: "E03-S2: Detalhes da Atividade, Status em Tempo Real & Delegação"
+  skill: /tdd
+  issue: "#10"
+  gap_ref: E03-S2
+  depends_on: [TASK-004]
+  status: done
+  concluido_em: "2026-09-07 01:40:00"
 ```
