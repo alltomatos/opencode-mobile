@@ -176,6 +176,7 @@ export default function SessionChatScreen() {
   const [model, setModel] = useState<SelectedModel | null>(null);
   const [showModePicker, setShowModePicker] = useState(false);
   const [showModelPicker, setShowModelPicker] = useState(false);
+  const [modelQuery, setModelQuery] = useState('');
   const [commands, setCommands] = useState<Command[]>([]);
 
   useEffect(() => {
@@ -778,7 +779,13 @@ export default function SessionChatScreen() {
       </View>
 
       <View style={[styles.dropdownRow, { paddingBottom: keyboardVisible ? 8 : insets.bottom + 8 }]}>
-        <TouchableOpacity style={styles.dropdownChip} onPress={() => setShowModelPicker(true)}>
+        <TouchableOpacity
+          style={styles.dropdownChip}
+          onPress={() => {
+            setModelQuery('');
+            setShowModelPicker(true);
+          }}
+        >
           <Text style={styles.dropdownChipText} numberOfLines={1}>
             {modelLabel}
           </Text>
@@ -819,38 +826,76 @@ export default function SessionChatScreen() {
         animationType="fade"
         onRequestClose={() => setShowModelPicker(false)}
       >
-        <TouchableOpacity style={styles.modalBackdrop} activeOpacity={1} onPress={() => setShowModelPicker(false)}>
-          <ScrollView style={styles.modalSheetScroll}>
+        <View style={styles.modalBackdrop}>
+          <TouchableOpacity style={styles.modalBackdropFill} activeOpacity={1} onPress={() => setShowModelPicker(false)} />
+          <View style={styles.modalSheetScroll}>
             <View style={styles.modalGrabber} />
-            {(providers?.all ?? [])
-              .filter((p) => providers?.connected.includes(p.id))
-              .map((provider) => (
-                <View key={provider.id}>
-                  <Text style={styles.modalGroupLabel}>{provider.name}</Text>
-                  {Object.values(provider.models).map((m) => {
-                    const active = model?.providerID === provider.id && model?.modelID === m.id;
-                    return (
-                      <TouchableOpacity
-                        key={m.id}
-                        style={styles.modalOption}
-                        onPress={() => {
-                          const next = { providerID: provider.id, modelID: m.id };
-                          setModel(next);
-                          setProjectModel(modelKey, next).catch(() => {});
-                          setShowModelPicker(false);
-                        }}
-                      >
-                        <Text style={[styles.modalOptionText, active && styles.modalOptionTextActive]}>
-                          {m.name}
-                        </Text>
-                        {active && <Ionicons name="checkmark" size={18} color={theme.accent} />}
-                      </TouchableOpacity>
-                    );
-                  })}
-                </View>
-              ))}
-          </ScrollView>
-        </TouchableOpacity>
+            <View style={styles.modelSearchRow}>
+              <Ionicons name="search" size={16} color={theme.textFaint} />
+              <TextInput
+                style={styles.modelSearchInput}
+                placeholder="Buscar modelo…"
+                placeholderTextColor={theme.placeholder}
+                value={modelQuery}
+                onChangeText={setModelQuery}
+                autoCapitalize="none"
+                autoCorrect={false}
+                autoFocus
+              />
+              {modelQuery.length > 0 && (
+                <TouchableOpacity onPress={() => setModelQuery('')} hitSlop={8}>
+                  <Ionicons name="close-circle" size={16} color={theme.textFaint} />
+                </TouchableOpacity>
+              )}
+            </View>
+            <ScrollView style={styles.modelListScroll} keyboardShouldPersistTaps="handled">
+              {(providers?.all ?? [])
+                .filter((p) => providers?.connected.includes(p.id))
+                .map((provider) => {
+                  const query = modelQuery.trim().toLowerCase();
+                  const models = Object.values(provider.models).filter(
+                    (m) => !query || m.name.toLowerCase().includes(query) || m.id.toLowerCase().includes(query),
+                  );
+                  if (models.length === 0) return null;
+                  return (
+                    <View key={provider.id}>
+                      <Text style={styles.modalGroupLabel}>{provider.name}</Text>
+                      {models.map((m) => {
+                        const active = model?.providerID === provider.id && model?.modelID === m.id;
+                        return (
+                          <TouchableOpacity
+                            key={m.id}
+                            style={styles.modalOption}
+                            onPress={() => {
+                              const next = { providerID: provider.id, modelID: m.id };
+                              setModel(next);
+                              setProjectModel(modelKey, next).catch(() => {});
+                              setShowModelPicker(false);
+                            }}
+                          >
+                            <Text style={[styles.modalOptionText, active && styles.modalOptionTextActive]}>
+                              {m.name}
+                            </Text>
+                            {active && <Ionicons name="checkmark" size={18} color={theme.accent} />}
+                          </TouchableOpacity>
+                        );
+                      })}
+                    </View>
+                  );
+                })}
+              {modelQuery.trim() &&
+                (providers?.all ?? []).every(
+                  (p) =>
+                    !providers?.connected.includes(p.id) ||
+                    Object.values(p.models).every(
+                      (m) =>
+                        !m.name.toLowerCase().includes(modelQuery.trim().toLowerCase()) &&
+                        !m.id.toLowerCase().includes(modelQuery.trim().toLowerCase()),
+                    ),
+                ) && <Text style={styles.modelSearchEmpty}>Nenhum modelo encontrado.</Text>}
+            </ScrollView>
+          </View>
+        </View>
       </Modal>
     </View>
   );
@@ -1050,6 +1095,13 @@ function createStyles(theme: Theme) {
       backgroundColor: 'rgba(0,0,0,0.4)',
       justifyContent: 'flex-end',
     },
+    modalBackdropFill: {
+      position: 'absolute',
+      top: 0,
+      left: 0,
+      right: 0,
+      bottom: 0,
+    },
     modalGrabber: {
       alignSelf: 'center',
       width: 36,
@@ -1070,6 +1122,32 @@ function createStyles(theme: Theme) {
       borderTopLeftRadius: 20,
       borderTopRightRadius: 20,
       maxHeight: '60%',
+    },
+    modelSearchRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+      marginHorizontal: 16,
+      marginBottom: 8,
+      paddingHorizontal: 12,
+      paddingVertical: 8,
+      borderRadius: 10,
+      backgroundColor: theme.bgAlt,
+    },
+    modelSearchInput: {
+      flex: 1,
+      fontSize: 15,
+      color: theme.text,
+      padding: 0,
+    },
+    modelListScroll: {
+      flexShrink: 1,
+    },
+    modelSearchEmpty: {
+      textAlign: 'center',
+      color: theme.textFaint,
+      fontSize: 13,
+      paddingVertical: 24,
     },
     modalGroupLabel: {
       paddingHorizontal: 16,
