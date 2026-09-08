@@ -158,6 +158,8 @@ export default function SettingsScreen() {
     setProvidersLoadError(null);
     try {
       const data = await listProviders(target, tok);
+      // eslint-disable-next-line no-console
+      console.log('[debug] GET /provider ->', JSON.stringify(data));
       if (data.connected.length === 0 && attempt < EMPTY_RETRY_DELAYS_MS.length) {
         await new Promise((resolve) => setTimeout(resolve, EMPTY_RETRY_DELAYS_MS[attempt]));
         return loadProviders(target, tok, attempt + 1);
