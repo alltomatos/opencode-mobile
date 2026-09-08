@@ -107,6 +107,8 @@ export default function SettingsScreen() {
   const [configError, setConfigError] = useState<string | null>(null);
 
   const [providers, setProviders] = useState<ProviderList | null>(null);
+  const [providersLoading, setProvidersLoading] = useState(false);
+  const [providersLoadError, setProvidersLoadError] = useState<string | null>(null);
   const [catalog, setCatalog] = useState<Record<string, ProviderCatalogItem> | null>(null);
   const [showAddProviderModal, setShowAddProviderModal] = useState(false);
   const [selectedCatalogItem, setSelectedCatalogItem] = useState<ProviderCatalogItem | null>(null);
@@ -133,11 +135,37 @@ export default function SettingsScreen() {
           if (config.memoryModel) setMemoryModel(config.memoryModel);
         })
         .catch(() => setMemoryEnabled(undefined));
-      listProviders(found, t).then(setProviders).catch(() => {});
+      loadProviders(found, t);
       listProviderCatalog(found, t).then(setCatalog).catch(() => {});
       getConfig(found, t).then(setServerConfig).catch(() => {});
     });
   }, [id]);
+
+  // GET /provider é documentada como lenta na primeira chamada de cada
+  // instância (~2-4s — reconstrói um grafo grande de serviços, ver
+  // comentário em ProviderHttpApi.list no fork). Um `.catch(() => {})`
+  // aqui escondia qualquer falha (timeout, rede instável) atrás de
+  // "Nenhum provedor conectado" — indistinguível de zero provedores de
+  // verdade, e foi exatamente esse sintoma reportado (provedores
+  // configurados no desktop "sumindo" no mobile). Tenta de novo antes
+  // de desistir, e mostra o erro real se ainda assim falhar.
+  async function loadProviders(target: ServerConnection, tok: string, attempt = 1) {
+    setProvidersLoading(true);
+    setProvidersLoadError(null);
+    try {
+      const data = await listProviders(target, tok);
+      setProviders(data);
+      setProvidersLoadError(null);
+    } catch (e) {
+      if (attempt < 3) {
+        await new Promise((resolve) => setTimeout(resolve, 1500));
+        return loadProviders(target, tok, attempt + 1);
+      }
+      setProvidersLoadError(e instanceof Error ? e.message : 'Falha ao carregar provedores.');
+    } finally {
+      setProvidersLoading(false);
+    }
+  }
 
   async function handleSaveMemoryModel(modelName: string) {
     if (!server || !token) return;
@@ -170,10 +198,7 @@ export default function SettingsScreen() {
 
   async function refreshProviders() {
     if (!server || !token) return;
-    try {
-      const list = await listProviders(server, token);
-      setProviders(list);
-    } catch {}
+    await loadProviders(server, token);
   }
 
   async function handleSaveApiKey() {
@@ -318,7 +343,19 @@ export default function SettingsScreen() {
         title="Provedores de IA"
         footer="Provedores conectados no servidor. Adicione novos usando chaves de API ou login OAuth."
       >
-        {providers?.connected && providers.connected.length > 0 ? (
+        {providersLoading && providers === null ? (
+          <Row title="Carregando…" loading last />
+        ) : providersLoadError ? (
+          <Row
+            icon="alert-circle-outline"
+            iconColor={theme.danger}
+            title="Falha ao carregar provedores"
+            subtitle={providersLoadError}
+            accessory={<Ionicons name="refresh" size={18} color={theme.accent} />}
+            onPress={refreshProviders}
+            last
+          />
+        ) : providers?.connected && providers.connected.length > 0 ? (
           providers.connected.map((pId, idx) => {
             const providerInfo = providers.all.find((p) => p.id === pId);
             const isLast = idx === providers.connected.length - 1;
