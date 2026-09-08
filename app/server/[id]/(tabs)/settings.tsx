@@ -390,6 +390,27 @@ export default function SettingsScreen() {
         </View>
       </Section>
 
+      <Section
+        title="Automação"
+        footer="Combos agrupam vários modelos com failover automático entre provedores. AgentUI cria agentes conversacionais com personalidade e conhecimento próprios."
+      >
+        <Row
+          icon="layers-outline"
+          iconColor="#ff9500"
+          title="Combos de Provedores"
+          subtitle="Pools de modelos com failover"
+          onPress={() => router.push(`/server/${id}/combos`)}
+        />
+        <Row
+          icon="chatbubbles-outline"
+          iconColor="#5856d6"
+          title="AgentUI"
+          subtitle="Agentes conversacionais customizados"
+          onPress={() => router.push(`/server/${id}/agentui`)}
+          last
+        />
+      </Section>
+
       {memoryEnabled !== null && memoryEnabled !== undefined && (
         <Section title="Memória" footer={`Configuração salva no servidor "${server?.label}", não no app. Cada projeto também tem a própria memória (gerenciável na tela de sessões dele).`}>
           <Row

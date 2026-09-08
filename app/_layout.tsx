@@ -43,6 +43,8 @@ function RootNavigator() {
         <Stack.Screen name="pair" options={{ title: 'Parear servidor', presentation: 'modal' }} />
         <Stack.Screen name="server/[id]/(tabs)" options={{ headerShown: false }} />
         <Stack.Screen name="server/[id]/edit" options={{ title: 'Editar servidor', presentation: 'modal' }} />
+        <Stack.Screen name="server/[id]/combos" options={{ title: 'Combos de Provedores' }} />
+        <Stack.Screen name="server/[id]/agentui" options={{ title: 'AgentUI' }} />
         <Stack.Screen name="server/[id]/code/add" options={{ title: 'Adicionar projeto', presentation: 'modal' }} />
         <Stack.Screen name="server/[id]/code/import" options={{ title: 'Importar projeto', presentation: 'modal' }} />
         <Stack.Screen name="server/[id]/code/[projectId]/index" options={{ title: 'Sessões' }} />

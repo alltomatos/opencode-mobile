@@ -398,6 +398,176 @@ export async function sendOAuthCallback(
   }
 }
 
+// Combo — pool nomeado de modelos com failover/round-robin e rate
+// limit opcional compartilhado. Conferido contra
+// packages/core/src/v1/config/combo.ts e
+// packages/opencode/src/server/routes/instance/httpapi/handlers/combo.ts
+// no fork do servidor (feature nova, ainda "Experimental HttpApi" lá).
+export type ComboModel = {
+  model: string; // "providerID/modelID"
+  priority: number;
+};
+
+export type ComboFailover = {
+  enabled: boolean;
+  strategy: 'priority' | 'round-robin';
+};
+
+export type ComboRateLimit = {
+  requestsPerMinute?: number;
+  tokensPerMinute?: number;
+};
+
+export type Combo = {
+  id: string;
+  name: string;
+  models: ComboModel[];
+  failover: ComboFailover;
+  rateLimit?: ComboRateLimit;
+};
+
+export async function listCombos(server: ServerConnection, token: string): Promise<Combo[]> {
+  const res = await fetch(authedUrl(server, token, '/combo'));
+  if (!res.ok) {
+    throw new Error(`GET /combo falhou: ${await errorDetail(res)}`);
+  }
+  return (await res.json()) as Combo[];
+}
+
+export async function saveCombo(server: ServerConnection, token: string, combo: Combo): Promise<Combo> {
+  const res = await fetch(authedUrl(server, token, '/combo'), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(combo),
+  });
+  if (!res.ok) {
+    throw new Error(`POST /combo falhou: ${await errorDetail(res)}`);
+  }
+  return (await res.json()) as Combo;
+}
+
+export async function deleteCombo(server: ServerConnection, token: string, id: string): Promise<void> {
+  const res = await fetch(authedUrl(server, token, `/combo/${id}`), { method: 'DELETE' });
+  if (!res.ok) {
+    throw new Error(`DELETE /combo/${id} falhou: ${await errorDetail(res)}`);
+  }
+}
+
+export async function resolveCombo(
+  server: ServerConnection,
+  token: string,
+  id: string
+): Promise<{ providerID: string; modelID: string }> {
+  const res = await fetch(authedUrl(server, token, `/combo/${id}/resolve`));
+  if (!res.ok) {
+    throw new Error(`GET /combo/${id}/resolve falhou: ${await errorDetail(res)}`);
+  }
+  return (await res.json()) as { providerID: string; modelID: string };
+}
+
+// AgentUI — agente conversacional configurável (personalidade, modelo
+// ou combo, fontes de RAG simples, guardrails, vínculo com canais como
+// Telegram). Fase 1 (CRUD) do épico AgentUI no servidor — conferido
+// contra packages/core/src/v1/config/agentui.ts e
+// packages/opencode/src/server/routes/instance/httpapi/handlers/agentui.ts
+// no fork. Não existe (ainda) endpoint HTTP pra conversar com o agente
+// diretamente — só gerenciar a config dele.
+export type AgentUIChannelBinding = {
+  type: 'telegram';
+};
+
+export type AgentUIRagSource = {
+  id: string;
+  kind: 'file' | 'text' | 'url';
+  label: string;
+  value: string;
+};
+
+export type AgentUIGuardrails = {
+  enabled: boolean;
+  level: 'basic' | 'strict';
+};
+
+export type AgentUIAgent = {
+  id: string;
+  name: string;
+  personality: string;
+  model: string; // "providerID/modelID" ou "combo:<id>"
+  channels: AgentUIChannelBinding[];
+  commandTriggers: string[];
+  ragSources: AgentUIRagSource[];
+  guardrails: AgentUIGuardrails;
+  // Ausente/undefined = habilitado — configs antigas (salvas antes desse
+  // campo existir) continuam funcionando sem mudança. Usar isAgentUIEnabled().
+  enabled?: boolean;
+};
+
+export function isAgentUIEnabled(agent: Pick<AgentUIAgent, 'enabled'>): boolean {
+  return agent.enabled !== false;
+}
+
+export async function listAgentUIAgents(server: ServerConnection, token: string): Promise<AgentUIAgent[]> {
+  const res = await fetch(authedUrl(server, token, '/agentui'));
+  if (!res.ok) {
+    throw new Error(`GET /agentui falhou: ${await errorDetail(res)}`);
+  }
+  return (await res.json()) as AgentUIAgent[];
+}
+
+export async function saveAgentUIAgent(
+  server: ServerConnection,
+  token: string,
+  agent: AgentUIAgent
+): Promise<AgentUIAgent> {
+  const res = await fetch(authedUrl(server, token, '/agentui'), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(agent),
+  });
+  if (!res.ok) {
+    throw new Error(`POST /agentui falhou: ${await errorDetail(res)}`);
+  }
+  return (await res.json()) as AgentUIAgent;
+}
+
+export async function deleteAgentUIAgent(server: ServerConnection, token: string, id: string): Promise<void> {
+  const res = await fetch(authedUrl(server, token, `/agentui/${id}`), { method: 'DELETE' });
+  if (!res.ok) {
+    throw new Error(`DELETE /agentui/${id} falhou: ${await errorDetail(res)}`);
+  }
+}
+
+// Sandbox de teste: manda uma mensagem pelo mesmo pipeline real do
+// agente (guardrails, personalidade, RAG, modelo) contra uma sessão
+// dedicada, sem tocar em nenhum canal de verdade (ex.: Telegram). O
+// campo é `projectDirectory`, não `directory` — o WorkspaceRoutingQuery
+// já usa `directory` como query param; esse aqui escolhe contra qual
+// projeto conectado (modelos/skills) a sessão de sandbox roda.
+export async function testAgentUIAgent(
+  server: ServerConnection,
+  token: string,
+  id: string,
+  projectDirectory: string,
+  message: string
+): Promise<{ reply: string; blocked: boolean }> {
+  const res = await fetch(authedUrl(server, token, `/agentui/${id}/test`), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ projectDirectory, message }),
+  });
+  if (!res.ok) {
+    throw new Error(`POST /agentui/${id}/test falhou: ${await errorDetail(res)}`);
+  }
+  return (await res.json()) as { reply: string; blocked: boolean };
+}
+
+export async function resetAgentUISandbox(server: ServerConnection, token: string, id: string): Promise<void> {
+  const res = await fetch(authedUrl(server, token, `/agentui/${id}/sandbox/reset`), { method: 'POST' });
+  if (!res.ok) {
+    throw new Error(`POST /agentui/${id}/sandbox/reset falhou: ${await errorDetail(res)}`);
+  }
+}
+
 export async function listAgents(server: ServerConnection, token: string): Promise<Agent[]> {
   const res = await fetch(authedUrl(server, token, '/agent'));
   if (!res.ok) {
