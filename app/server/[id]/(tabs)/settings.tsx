@@ -141,19 +141,27 @@ export default function SettingsScreen() {
     });
   }, [id]);
 
-  // GET /provider é documentada como lenta na primeira chamada de cada
-  // instância (~2-4s — reconstrói um grafo grande de serviços, ver
-  // comentário em ProviderHttpApi.list no fork). Um `.catch(() => {})`
-  // aqui escondia qualquer falha (timeout, rede instável) atrás de
-  // "Nenhum provedor conectado" — indistinguível de zero provedores de
-  // verdade, e foi exatamente esse sintoma reportado (provedores
-  // configurados no desktop "sumindo" no mobile). Tenta de novo antes
-  // de desistir, e mostra o erro real se ainda assim falhar.
-  async function loadProviders(target: ServerConnection, tok: string, attempt = 1) {
+  // GET /provider não estava dando erro nenhum (confirmado ao vivo: sem
+  // retry no catch acontecendo, sem banner de erro) — respondia
+  // `connected: []` de verdade nessa hora e só ficava populada mais
+  // tarde (a mesma sessão de chat, aberta depois, já via os provedores
+  // certos). A rota reconstrói um grafo grande de serviços na primeira
+  // chamada de cada instância (ver comentário em ProviderHttpApi.list
+  // no fork) — plausível que o servidor ainda esteja "esquentando"
+  // quando o app abre direto em Configurações. Por isso insiste também
+  // numa resposta bem-sucedida mas vazia, não só em erro de rede —
+  // key humana desse retry é diferenciar "zero provedores de verdade"
+  // (fica vazio mesmo depois de insistir) de "ainda não esquentou".
+  const EMPTY_RETRY_DELAYS_MS = [1500, 3000, 4000];
+  async function loadProviders(target: ServerConnection, tok: string, attempt = 0) {
     setProvidersLoading(true);
     setProvidersLoadError(null);
     try {
       const data = await listProviders(target, tok);
+      if (data.connected.length === 0 && attempt < EMPTY_RETRY_DELAYS_MS.length) {
+        await new Promise((resolve) => setTimeout(resolve, EMPTY_RETRY_DELAYS_MS[attempt]));
+        return loadProviders(target, tok, attempt + 1);
+      }
       setProviders(data);
       setProvidersLoadError(null);
     } catch (e) {
