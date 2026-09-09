@@ -17,7 +17,14 @@ export default function PairScreen() {
   const [showManual, setShowManual] = useState(false);
 
   async function pair(data: string) {
-    if (status === 'checking') return;
+    // A câmera continua no ar (e escaneando) mesmo depois de um erro —
+    // com o QR parado na frente dela, cada frame novo disparava pair()
+    // de novo, entrando num loop de tentativas simultâneas (cada uma com
+    // seu próprio fetch+timeout) que travava a thread JS a ponto do
+    // Android matar/minimizar o app (visto ao vivo no Expo Go). Só
+    // aceita um novo scan a partir do estado 'scanning' — que só volta
+    // a valer quando a pessoa toca em "Tentar de novo" ou "Usar câmera".
+    if (status !== 'scanning') return;
     setStatus('checking');
     setError(null);
     try {
