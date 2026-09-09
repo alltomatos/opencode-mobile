@@ -53,9 +53,9 @@ export default function EditServerScreen() {
     setError(null);
     try {
       const tokenToVerify = trimmedToken || (await getServerToken(server.id)) || '';
-      const ok = await verifyServer(trimmedUrl, tokenToVerify);
-      if (!ok) {
-        throw new Error('Servidor não respondeu com essa URL/token — confira antes de salvar.');
+      const result = await verifyServer(trimmedUrl, tokenToVerify);
+      if (!result.ok) {
+        throw new Error(result.reason);
       }
       await updateServer(server.id, { label: trimmedLabel, url: trimmedUrl });
       if (trimmedToken) {

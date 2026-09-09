@@ -52,16 +52,37 @@ export function parsePairingPayload(raw: string): PairingPayload {
   return parsed as PairingPayload;
 }
 
-// Valida o servidor (GET /instance) antes de salvar — ver
-// docs/prd/mobile-api-reference.md §4.3, passo 2.
-export async function verifyServer(url: string, token: string): Promise<boolean> {
-  const endpoint = new URL('/instance', url);
+// Valida o servidor antes de salvar — ver docs/prd/mobile-api-reference.md
+// §4.3, passo 2. Era GET /instance, mas essa rota não existe na API real
+// (o grupo "instance" só tem /instance/dispose, /path, /vcs etc. — GET
+// /instance sozinho caía no fallback do SPA do servidor, devolvendo o
+// HTML da página web com 200 OK, então "funcionava" por acidente até a
+// versão do servidor mudar o fallback). GET /global/health é a rota
+// certa, já usada em checkServerHealth (src/lib/api.ts) e confirmada ao
+// vivo contra o servidor. Timeout curto pra não travar o pareamento
+// numa rede lenta/relay do Tailscale sem dar feedback nenhum.
+export async function verifyServer(url: string, token: string): Promise<{ ok: true } | { ok: false; reason: string }> {
+  const endpoint = new URL('/global/health', url);
   endpoint.searchParams.set('auth_token', token);
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 8000);
   try {
-    const res = await fetch(endpoint.toString());
-    return res.ok;
-  } catch {
-    return false;
+    const res = await fetch(endpoint.toString(), { signal: controller.signal });
+    if (!res.ok) {
+      return { ok: false, reason: `Servidor respondeu ${res.status} (${res.statusText || 'erro'})` };
+    }
+    const body = (await res.json().catch(() => null)) as { healthy?: boolean } | null;
+    if (body && body.healthy === false) {
+      return { ok: false, reason: 'Servidor respondeu, mas reportou não estar saudável.' };
+    }
+    return { ok: true };
+  } catch (e) {
+    if (e instanceof Error && e.name === 'AbortError') {
+      return { ok: false, reason: 'Servidor não respondeu a tempo (timeout de 8s).' };
+    }
+    return { ok: false, reason: e instanceof Error ? e.message : 'Falha de rede desconhecida.' };
+  } finally {
+    clearTimeout(timer);
   }
 }
 

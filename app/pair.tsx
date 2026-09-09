@@ -22,9 +22,9 @@ export default function PairScreen() {
     setError(null);
     try {
       const payload = parsePairingPayload(data);
-      const ok = await verifyServer(payload.url, payload.token);
-      if (!ok) {
-        throw new Error('Servidor não respondeu — confira a URL e a rede.');
+      const result = await verifyServer(payload.url, payload.token);
+      if (!result.ok) {
+        throw new Error(result.reason);
       }
       const server = await addServer(payload);
       router.replace(`/server/${server.id}/code`);
