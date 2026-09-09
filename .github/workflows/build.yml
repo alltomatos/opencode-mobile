@@ -31,7 +31,10 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          # eas-cli mais recente (via @oclif/plugin-autocomplete) exige
+          # Node >=22 — Node 20 quebra a instalação do EAS CLI (visto ao
+          # vivo: "yarn add eas-cli" falhando com "engine node incompatible").
+          node-version: 22
           cache: npm
 
       - name: Instalar dependências
