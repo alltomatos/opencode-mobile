@@ -85,8 +85,8 @@ jobs:
       - name: Criar/atualizar GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ github.ref_type == 'tag' && github.ref_name || format('build-{0}', github.run_number) }}
-          name: ${{ github.ref_type == 'tag' && github.ref_name || format('Build de teste #{0}', github.run_number) }}
+          tag_name: "${{ github.ref_type == 'tag' && github.ref_name || format('build-{0}', github.run_number) }}"
+          name: "${{ github.ref_type == 'tag' && github.ref_name || format('Build de teste no.{0}', github.run_number) }}"
           prerelease: ${{ github.ref_type != 'tag' }}
           files: dist/*
           body: |
