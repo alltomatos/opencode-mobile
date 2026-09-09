@@ -392,7 +392,7 @@ export default function SettingsScreen() {
 
       <Section
         title="Automação"
-        footer="Combos agrupam vários modelos com failover automático entre provedores. AgentUI cria agentes conversacionais com personalidade e conhecimento próprios."
+        footer="Combos agrupam vários modelos com failover automático entre provedores. AgentUI (agentes conversacionais) tem aba própria na barra abaixo."
       >
         <Row
           icon="layers-outline"
@@ -400,13 +400,6 @@ export default function SettingsScreen() {
           title="Combos de Provedores"
           subtitle="Pools de modelos com failover"
           onPress={() => router.push(`/server/${id}/combos`)}
-        />
-        <Row
-          icon="chatbubbles-outline"
-          iconColor="#5856d6"
-          title="AgentUI"
-          subtitle="Agentes conversacionais customizados"
-          onPress={() => router.push(`/server/${id}/agentui`)}
           last
         />
       </Section>

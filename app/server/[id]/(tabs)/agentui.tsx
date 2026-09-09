@@ -18,9 +18,9 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { EmptyState } from '../../../src/components/ui/EmptyState';
-import { Row } from '../../../src/components/ui/Row';
-import { Section } from '../../../src/components/ui/Section';
+import { EmptyState } from '../../../../src/components/ui/EmptyState';
+import { Row } from '../../../../src/components/ui/Row';
+import { Section } from '../../../../src/components/ui/Section';
 import {
   AgentUIAgent,
   AgentUIRagSource,
@@ -37,9 +37,9 @@ import {
   resetAgentUISandbox,
   saveAgentUIAgent,
   testAgentUIAgent,
-} from '../../../src/lib/api';
-import { getServerToken, listServers, ServerConnection } from '../../../src/lib/servers';
-import { Theme, useTheme } from '../../../src/lib/theme';
+} from '../../../../src/lib/api';
+import { getServerToken, listServers, ServerConnection } from '../../../../src/lib/servers';
+import { Theme, useTheme } from '../../../../src/lib/theme';
 
 type FormState = {
   id: string;

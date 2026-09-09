@@ -38,6 +38,7 @@ export default function ServerTabsLayout() {
     >
       <Tabs.Screen name="code" options={{ title: 'Code', tabBarIcon: icon('folder-outline') }} />
       <Tabs.Screen name="batuta" options={{ title: 'Batuta', tabBarIcon: icon('git-network-outline') }} />
+      <Tabs.Screen name="agentui" options={{ title: 'AgentUI', tabBarIcon: icon('chatbubbles-outline') }} />
       <Tabs.Screen name="sandbox" options={{ title: 'Sandbox', tabBarIcon: icon('cube-outline') }} />
       <Tabs.Screen name="settings" options={{ title: 'Configurações', tabBarIcon: icon('settings-outline') }} />
     </Tabs>
