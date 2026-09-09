@@ -1,0 +1,96 @@
+name: Build de teste (Android + iOS Simulator)
+
+# Builda o app via EAS Build (na nuvem da Expo, sem precisar de macOS
+# runner nem Android SDK aqui) e publica os artefatos numa GitHub
+# Release. iOS sai como build de Simulador (sem custo, sem conta paga
+# de Apple Developer) — pra instalar em iPhone físico depois, é preciso
+# assinatura ad-hoc/TestFlight, que exige conta paga.
+#
+# Requer o secret EXPO_TOKEN (Settings > Secrets and variables >
+# Actions > New repository secret), gerado em
+# https://expo.dev/settings/access-tokens.
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  build:
+    name: Build ${{ matrix.platform }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        platform: [android, ios]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Instalar dependências
+        run: npm ci
+
+      - name: Setup EAS
+        uses: expo/expo-github-action@v8
+        with:
+          eas-version: latest
+          token: ${{ secrets.EXPO_TOKEN }}
+
+      - name: Build (${{ matrix.platform }}, perfil preview)
+        run: |
+          eas build \
+            --platform ${{ matrix.platform }} \
+            --profile preview \
+            --non-interactive \
+            --json > build-result.json
+          cat build-result.json
+
+      - name: Extrair URL do artefato
+        id: artifact
+        run: |
+          URL=$(node -e "console.log(JSON.parse(require('fs').readFileSync('build-result.json','utf8'))[0].artifacts.buildUrl)")
+          if [ "${{ matrix.platform }}" = "android" ]; then EXT=apk; else EXT=tar.gz; fi
+          echo "url=$URL" >> "$GITHUB_OUTPUT"
+          echo "filename=opencode-mobile-${{ matrix.platform }}.$EXT" >> "$GITHUB_OUTPUT"
+
+      - name: Baixar artefato
+        run: curl -L -o "${{ steps.artifact.outputs.filename }}" "${{ steps.artifact.outputs.url }}"
+
+      - name: Upload como artifact do workflow
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-${{ matrix.platform }}
+          path: ${{ steps.artifact.outputs.filename }}
+
+  release:
+    name: Publicar Release
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Baixar artefatos dos builds
+        uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: Criar/atualizar GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_type == 'tag' && github.ref_name || format('build-{0}', github.run_number) }}
+          name: ${{ github.ref_type == 'tag' && github.ref_name || format('Build de teste #{0}', github.run_number) }}
+          prerelease: ${{ github.ref_type != 'tag' }}
+          files: dist/*
+          body: |
+            Build de teste gerado automaticamente pelo GitHub Actions (perfil `preview` do EAS).
+
+            - **Android**: `opencode-mobile-android.apk` — instale direto no aparelho (ative "Fontes desconhecidas" se pedido).
+            - **iOS**: `opencode-mobile-ios.tar.gz` — build de Simulador, arraste o `.app` extraído pro Simulator do Xcode.
