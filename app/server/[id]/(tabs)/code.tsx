@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
-import { router, useLocalSearchParams } from 'expo-router';
-import { useEffect, useState } from 'react';
-import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
+import { useCallback, useEffect, useState } from 'react';
+import { Alert, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { EmptyState } from '../../../../src/components/ui/EmptyState';
@@ -21,6 +21,7 @@ export default function ProjectListScreen() {
   const [token, setToken] = useState<string | null>(null);
   const [projects, setProjects] = useState<ProjectFolder[] | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
 
   useEffect(() => {
     listServers().then(async (servers) => {
@@ -30,12 +31,38 @@ export default function ProjectListScreen() {
     });
   }, [id]);
 
+  async function loadProjects(target: ServerConnection, tok: string) {
+    try {
+      setProjects(await listAllProjects(target, tok));
+      setError(null);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Falha ao listar projetos.');
+    }
+  }
+
   useEffect(() => {
     if (!server || !token) return;
-    listAllProjects(server, token)
-      .then(setProjects)
-      .catch((e) => setError(e instanceof Error ? e.message : 'Falha ao listar projetos.'));
+    loadProjects(server, token);
   }, [server, token]);
+
+  // Projetos criados no desktop (ou em qualquer outro cliente) só
+  // apareciam aqui se o app fosse fechado e reaberto — a lista só
+  // carregava uma vez, no mount. Recarrega sempre que a aba Code ganha
+  // foco de novo (trocar de aba e voltar já sincroniza sozinho), e
+  // "puxar pra atualizar" cobre o caso de ficar parado nela esperando
+  // um projeto aparecer.
+  useFocusEffect(
+    useCallback(() => {
+      if (server && token) loadProjects(server, token);
+    }, [server, token])
+  );
+
+  async function handleRefresh() {
+    if (!server || !token) return;
+    setRefreshing(true);
+    await loadProjects(server, token);
+    setRefreshing(false);
+  }
 
   // Um FAB só, oferecendo os dois jeitos de trazer um projeto — pasta
   // nova ou importar uma que já existe no disco do servidor — em vez de
@@ -55,7 +82,13 @@ export default function ProjectListScreen() {
 
   return (
     <View style={styles.container}>
-      <ScrollView contentContainerStyle={styles.scroll} contentInsetAdjustmentBehavior="automatic">
+      <ScrollView
+        contentContainerStyle={styles.scroll}
+        contentInsetAdjustmentBehavior="automatic"
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={theme.accent} colors={[theme.accent]} />
+        }
+      >
         {error && (
           <View style={styles.errorBanner}>
             <Ionicons name="alert-circle" size={16} color={theme.danger} />
