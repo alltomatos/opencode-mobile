@@ -233,6 +233,19 @@ export default function SessionChatScreen() {
       listMessages(activeServer, activeToken, sessionId)
         .then((data) => !cancelled && setMessages(data))
         .catch(() => {});
+      // Permissão/pergunta pedidas bem na hora em que a SSE caiu eram
+      // perdidas pra sempre — só as mensagens eram re-sincronizadas na
+      // reconexão, então um permission.asked/question.asked que chegou
+      // durante a queda nunca era visto aqui, mesmo continuando pendente
+      // de verdade no servidor (reportado ao vivo: pergunta aparecia
+      // certinho no desktop, sem nada correspondente no mobile). Mesma
+      // lógica de mão dupla das mensagens, aplicada aqui também.
+      listPermissions(activeServer, activeToken)
+        .then((all) => !cancelled && setPermissionQueue(all.filter((p) => p.sessionID === sessionId)))
+        .catch(() => {});
+      listQuestions(activeServer, activeToken)
+        .then((all) => !cancelled && setQuestionQueue(all.filter((q) => q.sessionID === sessionId)))
+        .catch(() => {});
       // Um turno enviado por prompt_async pode ter começado E terminado
       // inteiro enquanto a SSE estava caída (app minimizado) — sem
       // nenhum evento busy/idle passando por aqui nesse meio tempo, quem
