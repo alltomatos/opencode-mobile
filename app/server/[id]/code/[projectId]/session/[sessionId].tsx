@@ -251,7 +251,28 @@ export default function SessionChatScreen() {
       .then((data) => !cancelled && setMessages(data))
       .catch((e) => !cancelled && setError(e instanceof Error ? e.message : 'Falha ao carregar mensagens.'));
     getSession(server, token, sessionId)
-      .then((data) => !cancelled && setSessionTitle(data.title))
+      .then((data) => {
+        if (cancelled) return;
+        setSessionTitle(data.title);
+        // Sincroniza com o que essa sessão usou por último em QUALQUER
+        // cliente (desktop, CLI, outro celular) — session.agent/model é
+        // gravado pelo servidor a cada prompt (Session.setAgentModel),
+        // então é a fonte de verdade real, ao contrário do cache local
+        // por projeto (getProjectModel) usado só como fallback pra
+        // sessão nova, sem histórico nenhum ainda.
+        if (data.model) {
+          setModel({ providerID: data.model.providerID, modelID: data.model.id });
+        }
+        if (data.agent === 'plan') {
+          setMode('plan');
+        } else if (data.agent === 'build') {
+          // "auto" não existe no servidor (é só um atalho local pra
+          // auto-aceitar permissões) — 'build' vira 'manual' por
+          // padrão, nunca 'auto', pra não auto-aprovar nada nesse
+          // aparelho sem o usuário escolher isso explicitamente aqui.
+          setMode('manual');
+        }
+      })
       .catch(() => {});
     listPermissions(server, token)
       .then((all) => !cancelled && setPermissionQueue(all.filter((p) => p.sessionID === sessionId)))

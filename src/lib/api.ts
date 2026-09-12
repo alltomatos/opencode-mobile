@@ -10,6 +10,15 @@ export type Session = {
   title: string;
   directory: string;
   parentID?: string;
+  // Agente/modelo usados na última mensagem enviada NESSA sessão, por
+  // qualquer cliente (desktop, CLI, outro celular) — Session.setAgentModel
+  // no servidor (packages/opencode/src/session/session.ts) grava isso a
+  // cada prompt. É a fonte de verdade pra sincronizar entre clientes;
+  // sem isso, cada app mantinha seu próprio "último modelo" local por
+  // projeto, e desktop/mobile mostravam modelo e modo (agente) diferentes
+  // pra mesma sessão (reportado ao vivo).
+  agent?: string;
+  model?: { id: string; providerID: string; variant?: string };
   time: {
     created: number;
     updated: number;
