@@ -5,6 +5,7 @@ import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Text, Text
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { EmptyState } from '../../../../../src/components/ui/EmptyState';
+import { MemoryModal } from '../../../../../src/components/MemoryModal';
 import { Row } from '../../../../../src/components/ui/Row';
 import { Section } from '../../../../../src/components/ui/Section';
 import {
@@ -51,6 +52,7 @@ export default function ProjectSessionsScreen() {
   const [deletingProject, setDeletingProject] = useState(false);
   const [deletingSessionID, setDeletingSessionID] = useState<string | null>(null);
   const [hasMemory, setHasMemory] = useState(false);
+  const [showMemoryModal, setShowMemoryModal] = useState(false);
   const [query, setQuery] = useState('');
   const [statusMap, setStatusMap] = useState<Record<string, SessionStatus>>({});
 
@@ -203,22 +205,8 @@ export default function ProjectSessionsScreen() {
     }
   }
 
-  // Um só toque no ícone já mostra o status (ativa/vazia) e, se tiver
-  // algo salvo, oferece a opção de esquecer — evita um ícone extra só
-  // pra "Esquecer memória" na barra compacta.
   function handleMemoryPress() {
-    if (!hasMemory) {
-      Alert.alert('Memória do projeto', 'Nenhuma memória guardada ainda.');
-      return;
-    }
-    Alert.alert(
-      'Memória do projeto',
-      'O agente possui observações específicas salvas. A memória global não é afetada se você esquecer esta.',
-      [
-        { text: 'Cancelar', style: 'cancel' },
-        { text: 'Esquecer memória', style: 'destructive', onPress: forgetMemory },
-      ]
-    );
+    setShowMemoryModal(true);
   }
 
   function openSandbox() {
@@ -361,6 +349,22 @@ export default function ProjectSessionsScreen() {
           <Ionicons name="add" size={28} color={theme.accentText} />
         )}
       </Pressable>
+
+      <MemoryModal
+        visible={showMemoryModal}
+        onClose={() => setShowMemoryModal(false)}
+        server={server}
+        token={token}
+        directory={directory}
+        projectName={projectName}
+        onMemoryChanged={() => {
+          if (server && token) {
+            getProjectMemoryStatus(server, token, directory)
+              .then(setHasMemory)
+              .catch(() => {});
+          }
+        }}
+      />
     </View>
   );
 }
