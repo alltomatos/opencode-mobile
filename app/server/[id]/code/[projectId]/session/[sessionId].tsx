@@ -56,6 +56,8 @@ import {
   ToolCard,
 } from '../../../../../../src/components/ActivityParts';
 import { PromptModal } from '../../../../../../src/components/ui/PromptModal';
+import { MemoryModal } from '../../../../../../src/components/MemoryModal';
+import { basename } from '../../../../../../src/lib/paths';
 import { notifyAgentDone, notifyError, notifyPermissionAsked } from '../../../../../../src/lib/notifications';
 import { getProjectModel, projectModelKey, setProjectModel, useSettings } from '../../../../../../src/lib/settings';
 
@@ -134,6 +136,7 @@ export default function SessionChatScreen() {
   const [messages, setMessages] = useState<MessageWithParts[] | null>(null);
   const [sessionTitle, setSessionTitle] = useState<string | null>(null);
   const [showRenameModal, setShowRenameModal] = useState(false);
+  const [showMemoryModal, setShowMemoryModal] = useState(false);
   const [draft, setDraft] = useState('');
   const [sending, setSending] = useState(false);
   // Fila de mensagens digitadas enquanto uma anterior ainda está em
@@ -749,6 +752,15 @@ export default function SessionChatScreen() {
               <Ionicons name="create-outline" size={15} color={theme.textFaint} />
             </TouchableOpacity>
           ),
+          headerRight: () => (
+            <TouchableOpacity
+              style={{ padding: 4 }}
+              onPress={() => setShowMemoryModal(true)}
+              hitSlop={8}
+            >
+              <Ionicons name="sparkles-outline" size={20} color={theme.accent} />
+            </TouchableOpacity>
+          ),
         }}
       />
 
@@ -758,6 +770,15 @@ export default function SessionChatScreen() {
         initialValue={headerTitle}
         onCancel={() => setShowRenameModal(false)}
         onSubmit={handleRenameSession}
+      />
+
+      <MemoryModal
+        visible={showMemoryModal}
+        onClose={() => setShowMemoryModal(false)}
+        server={server ?? null}
+        token={token}
+        directory={directory}
+        projectName={basename(directory)}
       />
 
       {children.length > 0 && (

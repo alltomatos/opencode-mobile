@@ -20,6 +20,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { StatusDot } from '../../../../src/components/StatusDot';
+import { MemoryModal } from '../../../../src/components/MemoryModal';
 import { Row } from '../../../../src/components/ui/Row';
 import { Section } from '../../../../src/components/ui/Section';
 import {
@@ -101,6 +102,7 @@ export default function SettingsScreen() {
   const [memoryModel, setMemoryModel] = useState<string>('');
   const [serverConfig, setServerConfig] = useState<Record<string, unknown> | null>(null);
   const [showMemoryModelModal, setShowMemoryModelModal] = useState(false);
+  const [showGlobalMemoryModal, setShowGlobalMemoryModal] = useState(false);
   const [showAdvancedConfigModal, setShowAdvancedConfigModal] = useState(false);
   const [rawConfigJson, setRawConfigJson] = useState('');
   const [savingConfig, setSavingConfig] = useState(false);
@@ -418,13 +420,21 @@ export default function SettingsScreen() {
             last={!memoryEnabled}
           />
           {memoryEnabled && (
-            <Row
-              title="Modelo de Memória"
-              subtitle={memoryModel ? `Modelo ativo: ${memoryModel}` : 'Usando modelo padrão do servidor'}
-              accessory={<Ionicons name="chevron-forward" size={18} color={theme.textFaint} />}
-              onPress={() => setShowMemoryModelModal(true)}
-              last
-            />
+            <>
+              <Row
+                title="Modelo de Memória"
+                subtitle={memoryModel ? `Modelo ativo: ${memoryModel}` : 'Usando modelo padrão do servidor'}
+                accessory={<Ionicons name="chevron-forward" size={18} color={theme.textFaint} />}
+                onPress={() => setShowMemoryModelModal(true)}
+              />
+              <Row
+                title="Memória Global"
+                subtitle="Ver fatos e diretrizes aprendidos em todos os projetos"
+                accessory={<Ionicons name="chevron-forward" size={18} color={theme.textFaint} />}
+                onPress={() => setShowGlobalMemoryModal(true)}
+                last
+              />
+            </>
           )}
         </Section>
       )}
@@ -698,6 +708,14 @@ export default function SettingsScreen() {
           </View>
         </TouchableOpacity>
       </Modal>
+
+      <MemoryModal
+        visible={showGlobalMemoryModal}
+        onClose={() => setShowGlobalMemoryModal(false)}
+        server={server}
+        token={token}
+        initialTab="global"
+      />
     </ScrollView>
   );
 }

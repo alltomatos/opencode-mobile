@@ -1213,6 +1213,66 @@ export async function deleteProjectMemory(
   }
 }
 
+export async function getProjectMemoryEntries(
+  server: ServerConnection,
+  token: string,
+  directory: string
+): Promise<string> {
+  const url = new URL('/memory/project/entries', server.url);
+  url.searchParams.set('auth_token', token);
+  url.searchParams.set('directory', directory);
+  const res = await fetch(url.toString());
+  if (!res.ok) {
+    throw new Error(`GET /memory/project/entries falhou: ${res.status}`);
+  }
+  const data = (await res.json()) as { content?: string };
+  return data.content ?? '';
+}
+
+export async function getGlobalMemoryEntries(
+  server: ServerConnection,
+  token: string
+): Promise<string> {
+  const res = await fetch(authedUrl(server, token, '/memory/global'));
+  if (!res.ok) {
+    throw new Error(`GET /memory/global falhou: ${res.status}`);
+  }
+  const data = (await res.json()) as { content?: string };
+  return data.content ?? '';
+}
+
+export async function addMemoryEntry(
+  server: ServerConnection,
+  token: string,
+  data: { directory?: string; note: string; global?: boolean }
+): Promise<{ path: string }> {
+  const res = await fetch(authedUrl(server, token, '/memory/entry'), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) {
+    throw new Error(`POST /memory/entry falhou: ${await errorDetail(res)}`);
+  }
+  return (await res.json()) as { path: string };
+}
+
+export async function promoteMemory(
+  server: ServerConnection,
+  token: string,
+  summary: string
+): Promise<{ path: string }> {
+  const res = await fetch(authedUrl(server, token, '/memory/promote'), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ summary }),
+  });
+  if (!res.ok) {
+    throw new Error(`POST /memory/promote falhou: ${await errorDetail(res)}`);
+  }
+  return (await res.json()) as { path: string };
+}
+
 // Parser mínimo de Server-Sent Events sobre o streaming reader do
 // `expo/fetch` (docs.expo.dev/versions/latest/sdk/expo — seção
 // "Streaming Fetch"). Sem lib externa: são poucas linhas e evita mais
