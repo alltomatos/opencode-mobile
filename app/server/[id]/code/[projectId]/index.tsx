@@ -45,7 +45,7 @@ export default function ProjectSessionsScreen() {
   const styles = createStyles(theme);
 
   const [server, setServer] = useState<ServerConnection | null | undefined>(undefined);
-  const [token, setToken] = useState<string | null>(null);
+  const [token, setToken] = useState<string>('');
   const [sessions, setSessions] = useState<Session[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
@@ -60,17 +60,25 @@ export default function ProjectSessionsScreen() {
     listServers().then(async (servers) => {
       const found = servers.find((s) => s.id === id) ?? null;
       setServer(found);
-      if (found) setToken(await getServerToken(found.id));
+      if (found) {
+        const t = (await getServerToken(found.id)) ?? '';
+        setToken(t);
+      }
     });
   }, [id]);
 
   useEffect(() => {
-    if (!server || !token) return;
+    if (!server) return;
 
     let cancelled = false;
     listSessions(server, token, directory)
       .then((data) => !cancelled && setSessions(data.filter((s) => s.directory === directory && !s.parentID)))
-      .catch((e) => !cancelled && setError(e instanceof Error ? e.message : 'Falha ao listar sessões.'));
+      .catch((e) => {
+        if (!cancelled) {
+          setError(e instanceof Error ? e.message : 'Falha ao listar sessões.');
+          setSessions((prev) => prev ?? []);
+        }
+      });
     getProjectMemoryStatus(server, token, directory)
       .then((value) => !cancelled && setHasMemory(value))
       .catch(() => {});

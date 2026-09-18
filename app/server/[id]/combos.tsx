@@ -89,9 +89,8 @@ export default function CombosScreen() {
       const found = list.find((s) => s.id === id) ?? null;
       setServer(found);
       if (!found) return;
-      const t = await getServerToken(found.id);
+      const t = (await getServerToken(found.id)) ?? '';
       setToken(t);
-      if (!t) return;
       reload(found, t);
       listProviders(found, t)
         .then((data) => setProviders(data.all))
@@ -105,6 +104,7 @@ export default function CombosScreen() {
       setError(null);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Falha ao carregar combos.');
+      setCombos((prev) => prev ?? []);
     }
   }
 

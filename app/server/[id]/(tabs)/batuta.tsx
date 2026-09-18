@@ -1,6 +1,6 @@
-import { Ionicons } from '@expo/vector-icons';
-import { Link, useLocalSearchParams } from 'expo-router';
-import { useEffect, useState } from 'react';
+﻿import { Ionicons } from '@expo/vector-icons';
+import { Link, useFocusEffect, useLocalSearchParams } from 'expo-router';
+import { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -42,49 +42,68 @@ export default function BatutaScreen() {
   const theme = useTheme();
   const styles = createStyles(theme);
 
-  const [server, setServer] = useState<ServerConnection | null>(null);
-  const [token, setToken] = useState<string | null>(null);
+  const [server, setServer] = useState<ServerConnection | null | undefined>(undefined);
+  const [token, setToken] = useState<string>('');
   const [activities, setActivities] = useState<BatutaActivity[] | null>(null);
+  const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Modal de criação
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [newActivityName, setNewActivityName] = useState('');
   const [newActivityPipeline, setNewActivityPipeline] = useState('');
   const [creating, setCreating] = useState(false);
 
-  useEffect(() => {
-    listServers().then(async (list) => {
-      const found = list.find((s) => s.id === id) ?? null;
-      setServer(found);
-      if (!found) return;
-      const t = await getServerToken(found.id);
-      setToken(t);
-      if (!t) return;
-      loadActivities(found, t);
-    });
-  }, [id]);
-
-  async function loadActivities(srv: ServerConnection, tok: string) {
-    setError(null);
+  const loadActivities = useCallback(async (srv: ServerConnection, tok: string) => {
     try {
       const data = await listBatutaActivities(srv, tok);
-      setActivities(data);
+      setActivities(data ?? []);
+      setError(null);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Falha ao carregar atividades do Batuta.');
+      setActivities((prev) => prev ?? []);
+    } finally {
+      setLoading(false);
     }
-  }
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    listServers().then(async (list) => {
+      if (cancelled) return;
+      const found = list.find((s) => s.id === id) ?? null;
+      setServer(found);
+      if (!found) {
+        setLoading(false);
+        return;
+      }
+      const t = (await getServerToken(found.id)) ?? '';
+      if (cancelled) return;
+      setToken(t);
+      loadActivities(found, t);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [id, loadActivities]);
+
+  useFocusEffect(
+    useCallback(() => {
+      if (server) {
+        loadActivities(server, token);
+      }
+    }, [server, token, loadActivities])
+  );
 
   async function handleRefresh() {
-    if (!server || !token) return;
+    if (!server) return;
     setRefreshing(true);
     await loadActivities(server, token);
     setRefreshing(false);
   }
 
   async function handleCreateActivity() {
-    if (!server || !token || !newActivityName.trim()) return;
+    if (!server || !newActivityName.trim()) return;
     setCreating(true);
     setError(null);
     try {
@@ -104,10 +123,10 @@ export default function BatutaScreen() {
   }
 
   function handleDeleteActivity(activity: BatutaActivity) {
-    if (!server || !token) return;
+    if (!server) return;
     Alert.alert(
       'Remover Atividade',
-      `Tem certeza que deseja apagar "${activity.name}"? Esta ação não pode ser desfeita.`,
+      'Tem certeza que deseja apagar "' + activity.name + '"? Esta ação não pode ser desfeita.',
       [
         { text: 'Cancelar', style: 'cancel' },
         {
@@ -126,7 +145,7 @@ export default function BatutaScreen() {
     );
   }
 
-  if (activities === null && !error) {
+  if (loading && activities === null) {
     return (
       <View style={styles.center}>
         <ActivityIndicator size="large" color={theme.accent} />
@@ -175,11 +194,11 @@ export default function BatutaScreen() {
             const statusInfo = STATUS_CONFIG[item.status] ?? STATUS_CONFIG.pending;
             return (
               <Section>
-                <Link href={`/server/${id}/batuta/${item.id}`} asChild>
+                <Link href={'/server/' + id + '/batuta/' + item.id} asChild>
                   <TouchableOpacity>
                     <Row
                       title={item.name}
-                      subtitle={item.pipeline ? `Pipeline: ${item.pipeline}` : `ID: ${item.id.slice(0, 8)}`}
+                      subtitle={item.pipeline ? 'Pipeline: ' + item.pipeline : 'ID: ' + item.id.slice(0, 8)}
                       accessory={
                         <View style={styles.statusBadge}>
                           <Ionicons name={statusInfo.icon} size={14} color={statusInfo.color} style={{ marginRight: 4 }} />

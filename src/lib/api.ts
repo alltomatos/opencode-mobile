@@ -10,6 +10,7 @@ export type Session = {
   title: string;
   directory: string;
   parentID?: string;
+  projectID?: string;
   // Agente/modelo usados na última mensagem enviada NESSA sessão, por
   // qualquer cliente (desktop, CLI, outro celular) — Session.setAgentModel
   // no servidor (packages/opencode/src/session/session.ts) grava isso a
@@ -19,6 +20,8 @@ export type Session = {
   // pra mesma sessão (reportado ao vivo).
   agent?: string;
   model?: { id: string; providerID: string; variant?: string };
+  tokens?: { input: number; output: number; reasoning: number; cache: { read: number; write: number } };
+  cost?: number;
   time: {
     created: number;
     updated: number;
@@ -40,6 +43,10 @@ export type Message = {
   id: string;
   sessionID: string;
   role: 'user' | 'assistant';
+  providerID?: string;
+  modelID?: string;
+  cost?: number;
+  tokens?: { input: number; output: number; reasoning: number; cache: { read: number; write: number } };
   time: {
     created: number;
     completed?: number;
@@ -266,7 +273,7 @@ async function errorDetail(res: Response): Promise<string> {
 
 function authedUrl(server: ServerConnection, token: string, path: string): string {
   const url = new URL(path, server.url);
-  url.searchParams.set('auth_token', token);
+  if (token) url.searchParams.set('auth_token', token);
   return url.toString();
 }
 
@@ -1318,4 +1325,148 @@ export async function* subscribeEvents(
   } finally {
     reader.cancel().catch(() => {});
   }
+}
+
+// Rotinas / Agendamentos (Schedules) — conferido contra
+// packages/schema/src/schedule.ts e packages/protocol/src/groups/schedule.ts.
+export type CronTrigger = { kind: 'cron'; expr: string };
+export type IntervalTrigger = { kind: 'interval'; ms: number };
+export type ManualTrigger = { kind: 'manual' };
+export type ScheduleTrigger = CronTrigger | IntervalTrigger | ManualTrigger;
+
+export type ShellAction = { kind: 'shell'; command: string; timeoutMs?: number };
+export type McpToolAction = { kind: 'mcp_tool'; server: string; tool: string; args?: Record<string, unknown>; timeoutMs?: number };
+export type SkillMcpTool = { server: string; tool: string };
+export type SkillAction = { kind: 'skill'; instructions: string; mcpTools?: SkillMcpTool[] };
+export type ScheduleAction = ShellAction | McpToolAction | SkillAction;
+
+export type Schedule = {
+  id: string;
+  trigger: ScheduleTrigger;
+  action: ScheduleAction;
+  workspace?: string;
+  enabled?: boolean;
+  lastRunAt?: number;
+  lastStatus?: 'success' | 'error';
+  lastError?: string;
+};
+
+export type ScheduleCreateInput = {
+  trigger: ScheduleTrigger;
+  action: ScheduleAction;
+  workspace?: string;
+  enabled?: boolean;
+};
+
+export async function listSchedules(
+  server: ServerConnection,
+  token: string,
+  directory?: string
+): Promise<Schedule[]> {
+  const url = new URL('/api/schedule', server.url);
+  url.searchParams.set('auth_token', token);
+  if (directory) url.searchParams.set('directory', directory);
+  const res = await fetch(url.toString());
+  if (!res.ok) {
+    throw new Error(`GET /api/schedule falhou: ${await errorDetail(res)}`);
+  }
+  return (await res.json()) as Schedule[];
+}
+
+export async function createSchedule(
+  server: ServerConnection,
+  token: string,
+  input: ScheduleCreateInput,
+  directory?: string
+): Promise<Schedule> {
+  const url = new URL('/api/schedule', server.url);
+  url.searchParams.set('auth_token', token);
+  if (directory) url.searchParams.set('directory', directory);
+  const res = await fetch(url.toString(), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(input),
+  });
+  if (!res.ok) {
+    throw new Error(`POST /api/schedule falhou: ${await errorDetail(res)}`);
+  }
+  return (await res.json()) as Schedule;
+}
+
+export async function runSchedule(
+  server: ServerConnection,
+  token: string,
+  scheduleID: string
+): Promise<Schedule> {
+  const res = await fetch(authedUrl(server, token, `/api/schedule/${scheduleID}/run`), {
+    method: 'POST',
+  });
+  if (!res.ok) {
+    throw new Error(`POST /api/schedule/${scheduleID}/run falhou: ${await errorDetail(res)}`);
+  }
+  return (await res.json()) as Schedule;
+}
+
+export async function deleteSchedule(
+  server: ServerConnection,
+  token: string,
+  scheduleID: string
+): Promise<void> {
+  const res = await fetch(authedUrl(server, token, `/api/schedule/${scheduleID}`), {
+    method: 'DELETE',
+  });
+  if (!res.ok) {
+    throw new Error(`DELETE /api/schedule/${scheduleID} falhou: ${await errorDetail(res)}`);
+  }
+}
+
+export type McpStatusMap = Record<string, { status: 'connected' | 'failed' | 'needs_auth' | 'disabled'; error?: string }>;
+export type McpCatalog = { tools: Array<{ name: string; description?: string }> };
+
+export async function listMcpStatus(server: ServerConnection, token: string): Promise<McpStatusMap> {
+  const res = await fetch(authedUrl(server, token, '/mcp'));
+  if (!res.ok) {
+    return {};
+  }
+  return (await res.json()) as McpStatusMap;
+}
+
+export async function getMcpCatalog(server: ServerConnection, token: string, name: string): Promise<McpCatalog> {
+  const res = await fetch(authedUrl(server, token, `/mcp/${name}/catalog`));
+  if (!res.ok) {
+    return { tools: [] };
+  }
+  return (await res.json()) as McpCatalog;
+}
+
+export function formatTriggerSummary(trigger: ScheduleTrigger): string {
+  if (trigger.kind === 'cron') {
+    const parts = String(trigger.expr ?? '').split(' ');
+    if (
+      parts.length === 5 &&
+      parts[0] !== '*' &&
+      parts[1] !== '*' &&
+      parts[2] === '*' &&
+      parts[3] === '*' &&
+      parts[4] === '*'
+    ) {
+      const min = String(parts[0]).padStart(2, '0');
+      const hr = String(parts[1]).padStart(2, '0');
+      return `Todo dia às ${hr}:${min}`;
+    }
+    return `cron: ${trigger.expr}`;
+  }
+  if (trigger.kind === 'interval') {
+    const minutes = Math.round(Number(trigger.ms ?? 0) / 60_000);
+    if (minutes % 60 === 0 && minutes > 0) return `A cada ${minutes / 60}h`;
+    return `A cada ${minutes}min`;
+  }
+  return 'Manual';
+}
+
+export function formatActionSummary(action: ScheduleAction): string {
+  if (action.kind === 'shell') return action.command;
+  if (action.kind === 'mcp_tool') return `${action.server}/${action.tool}`;
+  const tools = action.mcpTools?.length ? ` · usa ${action.mcpTools.map((t) => t.tool).join(', ')}` : '';
+  return `${action.instructions}${tools}`;
 }
