@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import * as Crypto from 'expo-crypto';
-import { useLocalSearchParams } from 'expo-router';
-import { useEffect, useState } from 'react';
+import { useFocusEffect, useLocalSearchParams } from 'expo-router';
+import { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -90,9 +90,10 @@ export default function AgentUIScreen() {
   const theme = useTheme();
   const styles = createStyles(theme);
 
-  const [server, setServer] = useState<ServerConnection | null>(null);
-  const [token, setToken] = useState<string | null>(null);
+  const [server, setServer] = useState<ServerConnection | null | undefined>(undefined);
+  const [token, setToken] = useState<string>('');
   const [agents, setAgents] = useState<AgentUIAgent[] | null>(null);
+  const [loading, setLoading] = useState(true);
   const [providers, setProviders] = useState<Provider[]>([]);
   const [combos, setCombos] = useState<Combo[]>([]);
   const [projects, setProjects] = useState<ProjectFolder[]>([]);
@@ -112,38 +113,58 @@ export default function AgentUIScreen() {
   const [sandboxSending, setSandboxSending] = useState(false);
   const [sandboxError, setSandboxError] = useState<string | null>(null);
 
-  useEffect(() => {
-    listServers().then(async (list) => {
-      const found = list.find((s) => s.id === id) ?? null;
-      setServer(found);
-      if (!found) return;
-      const t = await getServerToken(found.id);
-      setToken(t);
-      if (!t) return;
-      reload(found, t);
-      listProviders(found, t)
-        .then((data) => setProviders(data.all))
-        .catch(() => {});
-      listCombos(found, t)
-        .then(setCombos)
-        .catch(() => {});
-      listAllProjects(found, t)
-        .then((list) => {
-          setProjects(list);
-          if (list.length > 0) setSandboxDirectory((cur) => cur ?? list[0].path);
-        })
-        .catch(() => {});
-    });
-  }, [id]);
-
-  async function reload(target: ServerConnection, tok: string) {
+  const reload = useCallback(async (target: ServerConnection, tok: string) => {
     try {
       setAgents(await listAgentUIAgents(target, tok));
       setError(null);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Falha ao carregar agentes.');
+      setAgents((prev) => prev ?? []);
+    } finally {
+      setLoading(false);
     }
-  }
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    listServers().then(async (list) => {
+      if (cancelled) return;
+      const found = list.find((s) => s.id === id) ?? null;
+      setServer(found);
+      if (!found) {
+        setLoading(false);
+        return;
+      }
+      const t = (await getServerToken(found.id)) ?? '';
+      if (cancelled) return;
+      setToken(t);
+      reload(found, t);
+      listProviders(found, t)
+        .then((data) => !cancelled && setProviders(data.all))
+        .catch(() => {});
+      listCombos(found, t)
+        .then((data) => !cancelled && setCombos(data))
+        .catch(() => {});
+      listAllProjects(found, t)
+        .then((list) => {
+          if (cancelled) return;
+          setProjects(list);
+          if (list.length > 0) setSandboxDirectory((cur) => cur ?? list[0].path);
+        })
+        .catch(() => {});
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [id, reload]);
+
+  useFocusEffect(
+    useCallback(() => {
+      if (server) {
+        reload(server, token);
+      }
+    }, [server, token, reload])
+  );
 
   function openNew() {
     setForm(emptyForm());
@@ -289,17 +310,17 @@ export default function AgentUIScreen() {
           </View>
         )}
 
-        {agents === null ? (
+        {loading && agents === null ? (
           <ActivityIndicator style={{ marginTop: 40 }} color={theme.accent} />
-        ) : agents.length === 0 ? (
+        ) : agents && agents.length === 0 ? (
           <EmptyState
             icon="chatbubbles-outline"
             title="Nenhum agente ainda"
             subtitle="Crie um agente conversacional com personalidade, modelo e fontes de conhecimento próprias."
           />
         ) : (
-          <Section title={agents.length === 1 ? '1 agente' : `${agents.length} agentes`}>
-            {agents.map((agent, i) => {
+          <Section title={(agents?.length ?? 0) === 1 ? '1 agente' : `${agents?.length ?? 0} agentes`}>
+            {agents?.map((agent, i) => {
               const enabled = isAgentUIEnabled(agent);
               return (
                 <Row

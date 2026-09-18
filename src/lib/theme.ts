@@ -33,6 +33,12 @@ const light = {
   toolBorder: '#e5e5ea',
   toolShimmer: '#d1d1d6',
   success: '#34c759',
+  // Cores semânticas para estatísticas/KPIs
+  blue: '#007aff',
+  purple: '#af52de',
+  amber: '#ff9f0a',
+  emerald: '#34c759',
+  rose: '#f43f5e',
 };
 
 const dark = {
@@ -54,9 +60,15 @@ const dark = {
   bubbleAssistant: '#262629',
   placeholder: '#48484a',
   toolBg: '#1c1c1e',
-  toolBorder: '#38383a',
+  toolBorder: '#383a3c',
   toolShimmer: '#3a3a3c',
   success: '#30d158',
+  // Cores semânticas para estatísticas/KPIs
+  blue: '#0a84ff',
+  purple: '#bf5af2',
+  amber: '#ff9f0a',
+  emerald: '#30d158',
+  rose: '#f43f5e',
 };
 
 export type Theme = typeof light;

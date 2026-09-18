@@ -10,7 +10,14 @@
     "ios": {
       "supportsTablet": true,
       "buildNumber": "2",
-      "bundleIdentifier": "com.alltomatos.opencodemobile"
+      "bundleIdentifier": "com.alltomatos.opencodemobile",
+      "infoPlist": {
+        "UIBackgroundModes": [
+          "fetch",
+          "remote-notification",
+          "processing"
+        ]
+      }
     },
     "android": {
       "package": "com.alltomatos.opencodemobile",
@@ -23,7 +30,12 @@
       },
       "predictiveBackGestureEnabled": false,
       "permissions": [
-        "android.permission.CAMERA"
+        "android.permission.CAMERA",
+        "android.permission.POST_NOTIFICATIONS",
+        "android.permission.FOREGROUND_SERVICE",
+        "android.permission.FOREGROUND_SERVICE_DATA_SYNC",
+        "android.permission.WAKE_LOCK",
+        "android.permission.RECEIVE_BOOT_COMPLETED"
       ]
     },
     "web": {
@@ -53,7 +65,13 @@
           }
         }
       ],
-      "expo-notifications",
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/icon.png",
+          "color": "#E6F4FE"
+        }
+      ],
       "expo-web-browser",
       [
         "expo-build-properties",

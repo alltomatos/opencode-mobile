@@ -1,11 +1,16 @@
-import { Stack } from 'expo-router';
+import { router, Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect } from 'react';
 import { useColorScheme } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { BrandHeader } from '../src/components/BrandHeader';
-import { syncNotificationChannels } from '../src/lib/notifications';
+import { initBackgroundSync } from '../src/lib/backgroundSync';
+import {
+  addNotificationResponseListener,
+  getLastNotificationResponse,
+  syncNotificationChannels,
+} from '../src/lib/notifications';
 import { SettingsContext, useSettings, useSettingsState } from '../src/lib/settings';
 import { useTheme } from '../src/lib/theme';
 
@@ -26,6 +31,29 @@ function RootNavigator() {
   useEffect(() => {
     syncNotificationChannels(settings).catch(() => {});
   }, [settings.notificationSound, settings.notificationVibration]);
+
+  // Inicializa o serviço de background sync e o listener de clique em notificações
+  useEffect(() => {
+    initBackgroundSync().catch(() => {});
+
+    const unsubNotification = addNotificationResponseListener((data) => {
+      if (data?.url && typeof data.url === 'string') {
+        router.push(data.url as any);
+      }
+    });
+
+    getLastNotificationResponse()
+      .then((data) => {
+        if (data?.url && typeof data.url === 'string') {
+          router.push(data.url as any);
+        }
+      })
+      .catch(() => {});
+
+    return () => {
+      unsubNotification();
+    };
+  }, []);
 
   return (
     <SafeAreaProvider>
@@ -49,6 +77,7 @@ function RootNavigator() {
         <Stack.Screen name="server/[id]/code/[projectId]/index" options={{ title: 'Sessões' }} />
         <Stack.Screen name="server/[id]/code/[projectId]/session/[sessionId]" options={{ title: 'Sessão' }} />
         <Stack.Screen name="server/[id]/batuta/[activityId]" options={{ title: 'Atividade' }} />
+        <Stack.Screen name="server/[id]/routines/new" options={{ title: 'Nova rotina', presentation: 'modal' }} />
       </Stack>
     </SafeAreaProvider>
   );

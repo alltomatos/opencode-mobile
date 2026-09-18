@@ -20,12 +20,13 @@ export type ThemeOverride = 'system' | 'light' | 'dark';
 // `sound` da notificação, então simplificamos pra um toggle de
 // som e um de vibração GLOBAIS, cruzados com o toggle POR categoria
 // (agente/permissão/erro) que é o que realmente decide se dispara.
-export type NotificationCategory = 'agentDone' | 'permissions' | 'errors';
+export type NotificationCategory = 'agentDone' | 'permissions' | 'batuta' | 'errors';
 
 export type AppSettings = {
   themeOverride: ThemeOverride;
   showReasoningSummaries: boolean;
   toolPartsExpanded: boolean;
+  backgroundMonitoring: boolean;
   notifications: Record<NotificationCategory, boolean>;
   notificationSound: boolean;
   notificationVibration: boolean;
@@ -35,7 +36,8 @@ export const DEFAULT_SETTINGS: AppSettings = {
   themeOverride: 'system',
   showReasoningSummaries: false,
   toolPartsExpanded: false,
-  notifications: { agentDone: true, permissions: true, errors: true },
+  backgroundMonitoring: true,
+  notifications: { agentDone: true, permissions: true, batuta: true, errors: true },
   notificationSound: true,
   notificationVibration: true,
 };
@@ -46,7 +48,15 @@ export async function loadSettings(): Promise<AppSettings> {
   try {
     const raw = await AsyncStorage.getItem(STORAGE_KEY);
     if (!raw) return DEFAULT_SETTINGS;
-    return { ...DEFAULT_SETTINGS, ...(JSON.parse(raw) as Partial<AppSettings>) };
+    const parsed = JSON.parse(raw) as Partial<AppSettings>;
+    return {
+      ...DEFAULT_SETTINGS,
+      ...parsed,
+      notifications: {
+        ...DEFAULT_SETTINGS.notifications,
+        ...(parsed.notifications || {}),
+      },
+    };
   } catch {
     return DEFAULT_SETTINGS;
   }
