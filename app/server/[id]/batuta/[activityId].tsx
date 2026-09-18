@@ -23,6 +23,7 @@ import {
   startBatutaActivity,
 } from '../../../../src/lib/api';
 import { getServerToken, listServers, ServerConnection } from '../../../../src/lib/servers';
+import { trackActiveBatuta, untrackActiveBatuta } from '../../../../src/lib/backgroundSync';
 import { Theme, useTheme } from '../../../../src/lib/theme';
 
 const STATUS_CONFIG: Record<BatutaActivityStatus, { label: string; icon: keyof typeof Ionicons.glyphMap; color: string }> = {
@@ -64,6 +65,9 @@ export default function BatutaActivityDetailScreen() {
       const list = await listBatutaActivities(srv, tok);
       const found = list.find((a: BatutaActivity) => a.id === activityId) ?? null;
       setActivity(found);
+      if (found && (found.status === 'completed' || found.status === 'failed' || found.status === 'canceled')) {
+        untrackActiveBatuta(found.id);
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Falha ao carregar detalhe da atividade.');
     } finally {
@@ -76,9 +80,11 @@ export default function BatutaActivityDetailScreen() {
     setActionInProgress('start');
     setError(null);
     try {
+      trackActiveBatuta(server, token, id, activity.id, activity.name);
       await startBatutaActivity(server, token, activity.id);
       await loadActivity(server, token);
     } catch (e) {
+      untrackActiveBatuta(activity.id);
       setError(e instanceof Error ? e.message : 'Falha ao iniciar atividade.');
     } finally {
       setActionInProgress(null);
@@ -90,9 +96,11 @@ export default function BatutaActivityDetailScreen() {
     setActionInProgress('delegate');
     setError(null);
     try {
+      trackActiveBatuta(server, token, id, activity.id, activity.name);
       await delegateBatutaActivity(server, token, activity.id);
       await loadActivity(server, token);
     } catch (e) {
+      untrackActiveBatuta(activity.id);
       setError(e instanceof Error ? e.message : 'Falha ao delegar atividade.');
     } finally {
       setActionInProgress(null);
@@ -104,9 +112,11 @@ export default function BatutaActivityDetailScreen() {
     setActionInProgress('dispatch');
     setError(null);
     try {
+      trackActiveBatuta(server, token, id, activity.id, activity.name);
       await dispatchBatutaActivity(server, token, activity.id);
       await loadActivity(server, token);
     } catch (e) {
+      untrackActiveBatuta(activity.id);
       setError(e instanceof Error ? e.message : 'Falha ao disparar atividade.');
     } finally {
       setActionInProgress(null);

@@ -66,6 +66,7 @@ const THEME_OPTIONS: { value: ThemeOverride; label: string }[] = [
 const NOTIFICATION_CATEGORIES: { key: NotificationCategory; label: string; hint: string }[] = [
   { key: 'agentDone', label: 'Resposta do agente', hint: 'Avisa quando o agente termina de responder.' },
   { key: 'permissions', label: 'Pedidos de permissão', hint: 'Avisa quando o agente precisa de autorização pra agir.' },
+  { key: 'batuta', label: 'Atividades Batuta', hint: 'Avisa quando uma atividade orquestrada é finalizada.' },
   { key: 'errors', label: 'Erros', hint: 'Avisa quando um envio ou comando falha.' },
 ];
 
@@ -496,6 +497,17 @@ export default function SettingsScreen() {
                 }
               />
             ))}
+            <Row
+              title="Monitorar em segundo plano"
+              subtitle="Acompanha tarefas ativas e notifica mesmo com tela desligada ou outro app aberto."
+              accessory={
+                <Switch
+                  value={settings.backgroundMonitoring}
+                  onValueChange={(value) => update({ backgroundMonitoring: value })}
+                  trackColor={{ true: theme.accent, false: theme.border }}
+                />
+              }
+            />
             <Row
               title="Som"
               accessory={

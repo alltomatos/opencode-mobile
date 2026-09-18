@@ -30,12 +30,10 @@ const Notifications = loadNotifications();
 if (Notifications) {
   Notifications.setNotificationHandler({
     handleNotification: async () => ({
-      // Só mostra o alerta/som visualmente quando o app não está em
-      // primeiro plano — em foreground o usuário já está vendo o card
-      // de permissão/a resposta chegando na tela, notificação ali só
-      // duplicaria informação.
-      shouldShowBanner: AppState.currentState !== 'active',
-      shouldShowList: AppState.currentState !== 'active',
+      // Mostra o banner e lista sempre para não perder avisos mesmo navegando
+      // em outras abas do app; o som é emitido principalmente quando em background.
+      shouldShowBanner: true,
+      shouldShowList: true,
       shouldPlaySound: AppState.currentState !== 'active',
       shouldSetBadge: false,
     }),
@@ -45,6 +43,7 @@ if (Notifications) {
 const CHANNELS: Record<NotificationCategory, { id: string; name: string }> = {
   agentDone: { id: 'agent-done', name: 'Respostas do agente' },
   permissions: { id: 'permissions', name: 'Pedidos de permissão' },
+  batuta: { id: 'batuta', name: 'Atividades Batuta' },
   errors: { id: 'errors', name: 'Erros' },
 };
 
@@ -89,10 +88,29 @@ export async function syncNotificationChannels(settings: AppSettings): Promise<v
   }
 }
 
-async function notify(category: NotificationCategory, settings: AppSettings, title: string, body: string) {
+export type NotificationData = {
+  url?: string;
+  sessionId?: string;
+  serverId?: string;
+  projectId?: string;
+  activityId?: string;
+  [key: string]: unknown;
+};
+
+async function notify(
+  category: NotificationCategory,
+  settings: AppSettings,
+  title: string,
+  body: string,
+  data?: NotificationData
+) {
   if (!Notifications) return;
   if (!settings.notifications[category]) return;
-  const granted = await getNotificationPermissionStatus();
+  let granted = await getNotificationPermissionStatus();
+  if (granted === 'undetermined') {
+    const ok = await requestNotificationPermission();
+    granted = ok ? 'granted' : 'denied';
+  }
   if (granted !== 'granted') return;
   await Notifications.scheduleNotificationAsync({
     content: {
@@ -100,6 +118,7 @@ async function notify(category: NotificationCategory, settings: AppSettings, tit
       body,
       sound: settings.notificationSound ? 'default' : undefined,
       vibrate: settings.notificationVibration ? [0, 250, 150, 250] : undefined,
+      data: data ?? {},
     },
     // Conferido contra o tipo público real (expo-notifications/build/
     // Notifications.types.d.ts, ChannelAwareTriggerInput): disparo
@@ -109,14 +128,51 @@ async function notify(category: NotificationCategory, settings: AppSettings, tit
   }).catch(() => {});
 }
 
-export function notifyAgentDone(settings: AppSettings, sessionTitle: string) {
-  return notify('agentDone', settings, sessionTitle || 'Sessão', 'O agente terminou de responder.');
+export function notifyAgentDone(settings: AppSettings, sessionTitle: string, data?: NotificationData) {
+  return notify('agentDone', settings, sessionTitle || 'Sessão', 'O agente terminou de responder.', data);
 }
 
-export function notifyPermissionAsked(settings: AppSettings, permission: string) {
-  return notify('permissions', settings, 'Permissão pedida', `O agente quer permissão para: ${permission}`);
+export function notifyPermissionAsked(settings: AppSettings, permission: string, data?: NotificationData) {
+  return notify('permissions', settings, 'Permissão pedida', `O agente quer permissão para: ${permission}`, data);
 }
 
-export function notifyError(settings: AppSettings, message: string) {
-  return notify('errors', settings, 'Erro', message);
+export function notifyQuestionAsked(settings: AppSettings, question: string, data?: NotificationData) {
+  return notify('permissions', settings, 'Pergunta do agente', question, data);
+}
+
+export function notifyBatutaDone(settings: AppSettings, activityTitle: string, success: boolean, data?: NotificationData) {
+  return notify(
+    'batuta',
+    settings,
+    activityTitle || 'Atividade Batuta',
+    success ? 'Atividade concluída com sucesso.' : 'Atividade finalizada com erro.',
+    data
+  );
+}
+
+export function notifyError(settings: AppSettings, message: string, data?: NotificationData) {
+  return notify('errors', settings, 'Erro', message, data);
+}
+
+export function addNotificationResponseListener(listener: (data: NotificationData) => void): () => void {
+  if (!Notifications) return () => {};
+  const subscription = Notifications.addNotificationResponseReceivedListener((response) => {
+    const data = response.notification.request.content.data as NotificationData;
+    if (data) {
+      listener(data);
+    }
+  });
+  return () => {
+    subscription.remove();
+  };
+}
+
+export async function getLastNotificationResponse(): Promise<NotificationData | null> {
+  if (!Notifications) return null;
+  try {
+    const response = await Notifications.getLastNotificationResponseAsync();
+    return (response?.notification.request.content.data as NotificationData) ?? null;
+  } catch {
+    return null;
+  }
 }

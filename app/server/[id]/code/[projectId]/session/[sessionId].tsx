@@ -22,6 +22,7 @@ import {
   Command,
   FilePart,
   getSession,
+  getSessionStatusMap,
   ImageAttachment,
   listChildren,
   listCommands,
@@ -57,8 +58,14 @@ import {
 } from '../../../../../../src/components/ActivityParts';
 import { PromptModal } from '../../../../../../src/components/ui/PromptModal';
 import { MemoryModal } from '../../../../../../src/components/MemoryModal';
+import { SessionStatsModal } from '../../../../../../src/components/SessionStatsModal';
 import { basename } from '../../../../../../src/lib/paths';
 import { notifyAgentDone, notifyError, notifyPermissionAsked } from '../../../../../../src/lib/notifications';
+import {
+  registerTurnCompletionListener,
+  trackActiveSession,
+  untrackActiveSession,
+} from '../../../../../../src/lib/backgroundSync';
 import { getProjectModel, projectModelKey, setProjectModel, useSettings } from '../../../../../../src/lib/settings';
 
 // Ver docs/prd/mobile-app.md §6.1, item 3 — "modo" no app de referência
@@ -135,8 +142,10 @@ export default function SessionChatScreen() {
   const [token, setToken] = useState<string | null>(null);
   const [messages, setMessages] = useState<MessageWithParts[] | null>(null);
   const [sessionTitle, setSessionTitle] = useState<string | null>(null);
+  const [sessionData, setSessionData] = useState<Session | null>(null);
   const [showRenameModal, setShowRenameModal] = useState(false);
   const [showMemoryModal, setShowMemoryModal] = useState(false);
+  const [showStatsModal, setShowStatsModal] = useState(false);
   const [draft, setDraft] = useState('');
   const [sending, setSending] = useState(false);
   // Fila de mensagens digitadas enquanto uma anterior ainda está em
@@ -269,6 +278,7 @@ export default function SessionChatScreen() {
     getSession(server, token, sessionId)
       .then((data) => {
         if (cancelled) return;
+        setSessionData(data);
         setSessionTitle(data.title);
         // Sincroniza com o que essa sessão usou por último em QUALQUER
         // cliente (desktop, CLI, outro celular) — session.agent/model é
@@ -347,7 +357,10 @@ export default function SessionChatScreen() {
           if (event.type === 'session.created' || event.type === 'session.updated') {
             const { sessionID, info } = (event as { properties: { sessionID: string; info: Session } })
               .properties;
-            if (sessionID === sessionId) setSessionTitle(info.title);
+            if (sessionID === sessionId) {
+              setSessionTitle(info.title);
+              setSessionData(info);
+            }
             // Subagent (criado pela tool `task` — ver
             // docs/prd/mobile-app.md §3, item 2): parentID aponta pra
             // cá, então some/atualiza na tira de workers.
@@ -377,7 +390,12 @@ export default function SessionChatScreen() {
               continue;
             }
             setPermissionQueue((prev) => (prev.some((p) => p.id === req.id) ? prev : [...prev, req]));
-            notifyPermissionAsked(settingsRef.current, req.permission);
+            notifyPermissionAsked(settingsRef.current, req.permission, {
+              url: `/server/${id}/code/${projectId}/session/${sessionId}`,
+              serverId: id,
+              projectId,
+              sessionId,
+            });
           } else if (event.type === 'permission.replied') {
             const { requestID } = (event as { properties: { requestID: string } }).properties;
             setPermissionQueue((prev) => prev.filter((p) => p.id !== requestID));
@@ -385,7 +403,12 @@ export default function SessionChatScreen() {
             const req = (event as { properties: QuestionRequest }).properties;
             if (req.sessionID !== sessionId) continue;
             setQuestionQueue((prev) => (prev.some((q) => q.id === req.id) ? prev : [...prev, req]));
-            notifyPermissionAsked(settingsRef.current, req.questions[0]?.header ?? 'pergunta do agente');
+            notifyPermissionAsked(settingsRef.current, req.questions[0]?.header ?? 'pergunta do agente', {
+              url: `/server/${id}/code/${projectId}/session/${sessionId}`,
+              serverId: id,
+              projectId,
+              sessionId,
+            });
           } else if (event.type === 'question.replied' || event.type === 'question.rejected') {
             const { requestID } = (event as { properties: { requestID: string } }).properties;
             setQuestionQueue((prev) => prev.filter((q) => q.id !== requestID));
@@ -586,6 +609,9 @@ export default function SessionChatScreen() {
       },
     ]);
     try {
+      if (server) {
+        trackActiveSession(server, token, id, projectId, sessionId, sessionTitle ?? 'Sessão');
+      }
       // prompt_async volta na hora — o turno roda no servidor
       // desacoplado desta conexão (ver comentário em sendPromptAsync),
       // então fechar o app no meio não interrompe mais o agente. Espera
@@ -593,9 +619,50 @@ export default function SessionChatScreen() {
       // turno de verdade terminou antes de puxar o histórico final e
       // liberar a próxima mensagem da fila.
       await sendPromptAsync(server, token, sessionId, text, MODE_AGENT[mode], model ?? undefined, atts);
-      await new Promise<void>((resolve) => {
+
+      let pollInterval: ReturnType<typeof setInterval> | null = null;
+      const waiterPromise = new Promise<void>((resolve) => {
         turnWaiterRef.current = { sawBusy: false, resolve };
       });
+
+      const unregListener = registerTurnCompletionListener(sessionId, () => {
+        if (turnWaiterRef.current) {
+          const waiter = turnWaiterRef.current;
+          turnWaiterRef.current = null;
+          waiter.resolve();
+        }
+      });
+
+      // Polling de fallback: se a conexão SSE cair em background/sleep,
+      // esse timer garante que a transição de volta para 'idle' destrave o composer
+      pollInterval = setInterval(async () => {
+        if (!turnWaiterRef.current) {
+          if (pollInterval) clearInterval(pollInterval);
+          return;
+        }
+        try {
+          const statusMap = await getSessionStatusMap(server, token);
+          const st = statusMap[sessionId];
+          if (st) {
+            if (st.type === 'busy' && turnWaiterRef.current) {
+              turnWaiterRef.current.sawBusy = true;
+            } else if (st.type === 'idle' && turnWaiterRef.current?.sawBusy) {
+              if (pollInterval) clearInterval(pollInterval);
+              const waiter = turnWaiterRef.current;
+              turnWaiterRef.current = null;
+              waiter.resolve();
+            }
+          }
+        } catch {}
+      }, 2500);
+
+      try {
+        await waiterPromise;
+      } finally {
+        if (pollInterval) clearInterval(pollInterval);
+        unregListener();
+      }
+
       const [fresh, session] = await Promise.all([
         listMessages(server, token, sessionId),
         getSession(server, token, sessionId),
@@ -605,7 +672,12 @@ export default function SessionChatScreen() {
     } catch (e) {
       const message = e instanceof Error ? e.message : 'Falha ao enviar mensagem.';
       setError(message);
-      notifyError(settings, message);
+      notifyError(settings, message, {
+        url: `/server/${id}/code/${projectId}/session/${sessionId}`,
+        serverId: id,
+        projectId,
+        sessionId,
+      });
     }
   }
 
@@ -639,10 +711,16 @@ export default function SessionChatScreen() {
       current = dequeue();
     }
     setSending(false);
+    untrackActiveSession(sessionId);
     // Só notifica quando a fila inteira esvaziou — se ainda tem
     // mensagem enfileirada, o usuário sabe que o app continua
     // trabalhando (não faz sentido notificar "terminei" no meio).
-    notifyAgentDone(settings, sessionTitle ?? 'Sessão');
+    notifyAgentDone(settings, sessionTitle ?? 'Sessão', {
+      url: `/server/${id}/code/${projectId}/session/${sessionId}`,
+      serverId: id,
+      projectId,
+      sessionId,
+    });
   }
 
   async function handleSend() {
@@ -753,13 +831,22 @@ export default function SessionChatScreen() {
             </TouchableOpacity>
           ),
           headerRight: () => (
-            <TouchableOpacity
-              style={{ padding: 4 }}
-              onPress={() => setShowMemoryModal(true)}
-              hitSlop={8}
-            >
-              <Ionicons name="sparkles-outline" size={20} color={theme.accent} />
-            </TouchableOpacity>
+            <View style={styles.headerRight}>
+              <TouchableOpacity
+                style={{ padding: 4 }}
+                onPress={() => setShowStatsModal(true)}
+                hitSlop={8}
+              >
+                <Ionicons name="bar-chart-outline" size={20} color={theme.accent} />
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={{ padding: 4 }}
+                onPress={() => setShowMemoryModal(true)}
+                hitSlop={8}
+              >
+                <Ionicons name="sparkles-outline" size={20} color={theme.accent} />
+              </TouchableOpacity>
+            </View>
           ),
         }}
       />
@@ -779,6 +866,15 @@ export default function SessionChatScreen() {
         token={token}
         directory={directory}
         projectName={basename(directory)}
+      />
+
+      <SessionStatsModal
+        visible={showStatsModal}
+        onClose={() => setShowStatsModal(false)}
+        session={sessionData}
+        messages={messages}
+        server={server}
+        token={token}
       />
 
       {children.length > 0 && (
@@ -1537,6 +1633,11 @@ function createStyles(theme: Theme) {
       color: theme.accentText,
       fontWeight: '600',
       fontSize: 15,
+    },
+    headerRight: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 4,
     },
   });
 }
