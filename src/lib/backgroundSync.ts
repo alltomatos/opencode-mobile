@@ -212,6 +212,9 @@ export async function checkActiveTasks(): Promise<boolean> {
       };
 
       if (task.type === 'session' && task.sessionId) {
+        const encodedProj = task.projectId ? encodeURIComponent(decodeURIComponent(task.projectId)) : '';
+        const sessionUrl = `/server/${task.serverId}/code/${encodedProj}/session/${task.sessionId}`;
+
         // 1. Checa pedidos de permissão pendentes
         try {
           const perms = await listPermissions(server, task.token);
@@ -222,7 +225,7 @@ export async function checkActiveTasks(): Promise<boolean> {
                 notifiedEvents.add(eventKey);
                 hadUpdates = true;
                 notifyPermissionAsked(settings, req.permission, {
-                  url: `/server/${task.serverId}/code/${task.projectId}/session/${task.sessionId}`,
+                  url: sessionUrl,
                   serverId: task.serverId,
                   projectId: task.projectId,
                   sessionId: task.sessionId,
@@ -242,7 +245,7 @@ export async function checkActiveTasks(): Promise<boolean> {
                 notifiedEvents.add(eventKey);
                 hadUpdates = true;
                 notifyQuestionAsked(settings, req.questions[0]?.header ?? 'pergunta do agente', {
-                  url: `/server/${task.serverId}/code/${task.projectId}/session/${task.sessionId}`,
+                  url: sessionUrl,
                   serverId: task.serverId,
                   projectId: task.projectId,
                   sessionId: task.sessionId,
@@ -263,7 +266,7 @@ export async function checkActiveTasks(): Promise<boolean> {
             } else if (status.type === 'idle' && task.lastKnownStatus === 'busy') {
               hadUpdates = true;
               notifyAgentDone(settings, task.sessionTitle || 'Sessão', {
-                url: `/server/${task.serverId}/code/${task.projectId}/session/${task.sessionId}`,
+                url: sessionUrl,
                 serverId: task.serverId,
                 projectId: task.projectId,
                 sessionId: task.sessionId,
@@ -275,7 +278,7 @@ export async function checkActiveTasks(): Promise<boolean> {
             // Se não consta mais no mapa de status como busy, considera concluído
             hadUpdates = true;
             notifyAgentDone(settings, task.sessionTitle || 'Sessão', {
-              url: `/server/${task.serverId}/code/${task.projectId}/session/${task.sessionId}`,
+              url: sessionUrl,
               serverId: task.serverId,
               projectId: task.projectId,
               sessionId: task.sessionId,

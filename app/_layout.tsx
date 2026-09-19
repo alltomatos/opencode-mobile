@@ -36,16 +36,45 @@ function RootNavigator() {
   useEffect(() => {
     initBackgroundSync().catch(() => {});
 
-    const unsubNotification = addNotificationResponseListener((data) => {
-      if (data?.url && typeof data.url === 'string') {
-        router.push(data.url as any);
+    function handleNavigate(data: {
+      url?: string;
+      serverId?: string;
+      projectId?: string;
+      sessionId?: string;
+      activityId?: string;
+    }) {
+      if (!data) return;
+      let target: string | null = null;
+      if (data.serverId && data.projectId && data.sessionId) {
+        const encodedProj = encodeURIComponent(decodeURIComponent(data.projectId));
+        target = `/server/${data.serverId}/code/${encodedProj}/session/${data.sessionId}`;
+      } else if (data.serverId && data.activityId) {
+        target = `/server/${data.serverId}/batuta/${data.activityId}`;
+      } else if (data.url && typeof data.url === 'string') {
+        target = data.url;
       }
-    });
+
+      if (target) {
+        const route = target;
+        // Atraso de 300ms para aguardar a montagem completa da árvore de rotas no Android/iOS
+        setTimeout(() => {
+          try {
+            router.push(route as any);
+          } catch {
+            try {
+              router.replace(route as any);
+            } catch {}
+          }
+        }, 300);
+      }
+    }
+
+    const unsubNotification = addNotificationResponseListener(handleNavigate);
 
     getLastNotificationResponse()
       .then((data) => {
-        if (data?.url && typeof data.url === 'string') {
-          router.push(data.url as any);
+        if (data) {
+          handleNavigate(data);
         }
       })
       .catch(() => {});

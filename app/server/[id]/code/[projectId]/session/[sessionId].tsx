@@ -137,6 +137,7 @@ export default function SessionChatScreen() {
   const { settings } = useSettings();
   const directory = decodeURIComponent(projectId);
   const modelKey = projectModelKey(id, directory);
+  const sessionRoute = `/server/${id}/code/${encodeURIComponent(directory)}/session/${sessionId}`;
 
   const [server, setServer] = useState<ServerConnection | null | undefined>(undefined);
   const [token, setToken] = useState<string | null>(null);
@@ -391,7 +392,7 @@ export default function SessionChatScreen() {
             }
             setPermissionQueue((prev) => (prev.some((p) => p.id === req.id) ? prev : [...prev, req]));
             notifyPermissionAsked(settingsRef.current, req.permission, {
-              url: `/server/${id}/code/${projectId}/session/${sessionId}`,
+              url: sessionRoute,
               serverId: id,
               projectId,
               sessionId,
@@ -404,7 +405,7 @@ export default function SessionChatScreen() {
             if (req.sessionID !== sessionId) continue;
             setQuestionQueue((prev) => (prev.some((q) => q.id === req.id) ? prev : [...prev, req]));
             notifyPermissionAsked(settingsRef.current, req.questions[0]?.header ?? 'pergunta do agente', {
-              url: `/server/${id}/code/${projectId}/session/${sessionId}`,
+              url: sessionRoute,
               serverId: id,
               projectId,
               sessionId,
@@ -673,7 +674,7 @@ export default function SessionChatScreen() {
       const message = e instanceof Error ? e.message : 'Falha ao enviar mensagem.';
       setError(message);
       notifyError(settings, message, {
-        url: `/server/${id}/code/${projectId}/session/${sessionId}`,
+        url: sessionRoute,
         serverId: id,
         projectId,
         sessionId,
@@ -716,7 +717,7 @@ export default function SessionChatScreen() {
     // mensagem enfileirada, o usuário sabe que o app continua
     // trabalhando (não faz sentido notificar "terminei" no meio).
     notifyAgentDone(settings, sessionTitle ?? 'Sessão', {
-      url: `/server/${id}/code/${projectId}/session/${sessionId}`,
+      url: sessionRoute,
       serverId: id,
       projectId,
       sessionId,
