@@ -553,6 +553,25 @@ export async function deleteAgentUIAgent(server: ServerConnection, token: string
   }
 }
 
+export type AgentUIAuditEntry = {
+  id: string;
+  agentId: string;
+  channel: 'telegram' | 'whatsapp' | 'sandbox' | string;
+  chatKey: string;
+  incoming: string;
+  outgoing: string;
+  timestamp: number;
+  tokens?: { input: number; output: number };
+};
+
+export async function getAgentUIAudit(server: ServerConnection, token: string, agentId: string): Promise<AgentUIAuditEntry[]> {
+  const res = await fetch(authedUrl(server, token, `/agentui/${agentId}/audit`));
+  if (!res.ok) {
+    throw new Error(`GET /agentui/${agentId}/audit falhou: ${await errorDetail(res)}`);
+  }
+  return (await res.json()) as AgentUIAuditEntry[];
+}
+
 // Sandbox de teste: manda uma mensagem pelo mesmo pipeline real do
 // agente (guardrails, personalidade, RAG, modelo) contra uma sessão
 // dedicada, sem tocar em nenhum canal de verdade (ex.: Telegram). O

@@ -18,6 +18,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { AgentUIAuditModal } from '../../../../src/components/AgentUIAuditModal';
 import { EmptyState } from '../../../../src/components/ui/EmptyState';
 import { Row } from '../../../../src/components/ui/Row';
 import { Section } from '../../../../src/components/ui/Section';
@@ -102,6 +103,7 @@ export default function AgentUIScreen() {
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState<FormState>(emptyForm());
   const [isNewAgent, setIsNewAgent] = useState(true);
+  const [auditAgent, setAuditAgent] = useState<AgentUIAgent | null>(null);
   const [showModelPicker, setShowModelPicker] = useState(false);
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
@@ -359,10 +361,22 @@ export default function AgentUIScreen() {
               <View style={styles.formTitleRow}>
                 <Text style={styles.modalTitle}>{isNewAgent ? 'Novo agente' : 'Editar agente'}</Text>
                 {!isNewAgent && (
-                  <TouchableOpacity style={styles.testBtn} onPress={() => openSandbox(form.id)}>
-                    <Ionicons name="play-circle-outline" size={16} color={theme.accent} style={{ marginRight: 4 }} />
-                    <Text style={styles.testBtnText}>Testar</Text>
-                  </TouchableOpacity>
+                  <View style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
+                    <TouchableOpacity
+                      style={styles.testBtn}
+                      onPress={() => {
+                        const current = agents?.find((a) => a.id === form.id) ?? null;
+                        if (current) setAuditAgent(current);
+                      }}
+                    >
+                      <Ionicons name="document-text-outline" size={16} color={theme.purple} style={{ marginRight: 4 }} />
+                      <Text style={[styles.testBtnText, { color: theme.purple }]}>Audit</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity style={styles.testBtn} onPress={() => openSandbox(form.id)}>
+                      <Ionicons name="play-circle-outline" size={16} color={theme.accent} style={{ marginRight: 4 }} />
+                      <Text style={styles.testBtnText}>Testar</Text>
+                    </TouchableOpacity>
+                  </View>
                 )}
               </View>
 
@@ -654,6 +668,14 @@ export default function AgentUIScreen() {
           </KeyboardAvoidingView>
         </View>
       </Modal>
+
+      <AgentUIAuditModal
+        visible={!!auditAgent}
+        onClose={() => setAuditAgent(null)}
+        server={server ?? null}
+        token={token}
+        agent={auditAgent}
+      />
     </View>
   );
 }
