@@ -27,6 +27,7 @@
 - [x] [**[E10] Provedores E18, Combos Especialistas & Raciocínio Estendido**](https://github.com/alltomatos/opencode-mobile/issues/24) — `done`
   - Suporte a Combos com cadeias de prioridade/fallback, visualização de cotas/cooldown multi-contas (AGY/Kiro) e controle de raciocínio estendido.
 - [x] [**[E11] AgentUI Audit Logs & Monitoramento Batuta Live**](https://github.com/alltomatos/opencode-mobile/issues/25) — `done`
+- [x] [**[E12] Paridade Total de Modos de Permissões & Sincronização Bidirecional Desktop/Mobile**](https://github.com/alltomatos/opencode-mobile/issues/26) — `done`
   - Visualização de logs de auditoria WhatsApp (izapia) e Telegram, com monitoramento dos workers do Batuta.
 
 ---

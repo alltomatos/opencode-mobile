@@ -68,16 +68,63 @@ import {
   trackActiveSession,
   untrackActiveSession,
 } from '../../../../../../src/lib/backgroundSync';
-import { getProjectModel, projectModelKey, setProjectModel, useSettings } from '../../../../../../src/lib/settings';
+import {
+  getProjectBypass,
+  getProjectModel,
+  projectBypassKey,
+  projectModelKey,
+  setProjectBypass,
+  setProjectModel,
+  useSettings,
+} from '../../../../../../src/lib/settings';
 
-// Ver docs/prd/mobile-app.md §6.1, item 3 — "modo" no app de referência
-// é dois mecanismos combinados: agente (build/plan) + nível de
-// auto-aceite de permissão (client-only, o servidor não tem esse
-// conceito). "Aceitar edições" fica pra depois — exige diferenciar
-// permissão de edição das outras só pelo campo `permission`/`patterns`.
-type Mode = 'manual' | 'plan' | 'auto';
-const MODE_AGENT: Record<Mode, string> = { manual: 'build', plan: 'plan', auto: 'build' };
-const MODE_LABEL: Record<Mode, string> = { manual: 'Manual', plan: 'Planejar', auto: 'Automático' };
+// Modos de permissão e agente paritários com a interface Desktop:
+// - Automático: agente 'build', auto-aceita todas as permissões na sessão
+// - Manual: agente 'build', pergunta todas as alterações
+// - Aceitar edições: agente 'build', auto-aceita apenas permissões de edição ('edit'), pergunta para bash/outros
+// - Planejar: agente 'plan', cria plano antes de fazer alterações
+// - Ignorar permissões: escopado ao diretório do projeto, auto-aceita tudo e persiste
+export type Mode = 'auto' | 'manual' | 'edits' | 'plan' | 'bypass';
+
+const MODE_AGENT: Record<Mode, string> = {
+  auto: 'build',
+  manual: 'build',
+  edits: 'build',
+  plan: 'plan',
+  bypass: 'build',
+};
+
+const MODE_LABEL: Record<Mode, string> = {
+  auto: 'Automático',
+  manual: 'Manual',
+  edits: 'Aceitar edições',
+  plan: 'Planejar',
+  bypass: 'Ignorar permissões',
+};
+
+const MODE_DESCRIPTION: Record<Mode, string> = {
+  auto: 'Gerencia as decisões de permissão automaticamente',
+  manual: 'Sempre perguntar antes de fazer alterações',
+  edits: 'Aceitar automaticamente todas as edições de arquivo',
+  plan: 'Criar um plano antes de fazer alterações',
+  bypass: 'Aceita todas as permissões para este diretório',
+};
+
+const MODE_ICON: Record<Mode, keyof typeof Ionicons.glyphMap> = {
+  auto: 'checkmark-circle-outline',
+  manual: 'eye-outline',
+  edits: 'code-slash-outline',
+  plan: 'list-outline',
+  bypass: 'warning-outline',
+};
+
+function shouldAutoApprove(mode: Mode, permissionName?: string): boolean {
+  if (mode === 'auto' || mode === 'bypass') return true;
+  if (mode === 'edits') {
+    return permissionName === 'edit';
+  }
+  return false;
+}
 import { getServerToken, listServers, ServerConnection } from '../../../../../../src/lib/servers';
 import { Theme, useTheme } from '../../../../../../src/lib/theme';
 
@@ -139,6 +186,7 @@ export default function SessionChatScreen() {
   const { settings } = useSettings();
   const directory = decodeURIComponent(projectId);
   const modelKey = projectModelKey(id, directory);
+  const bypassKey = projectBypassKey(id, directory);
   const sessionRoute = `/server/${id}/code/${encodeURIComponent(directory)}/session/${sessionId}`;
 
   const [server, setServer] = useState<ServerConnection | null | undefined>(undefined);
@@ -280,7 +328,7 @@ export default function SessionChatScreen() {
       .then((data) => !cancelled && setMessages(data))
       .catch((e) => !cancelled && setError(e instanceof Error ? e.message : 'Falha ao carregar mensagens.'));
     getSession(server, token, sessionId)
-      .then((data) => {
+      .then(async (data) => {
         if (cancelled) return;
         setSessionData(data);
         setSessionTitle(data.title);
@@ -293,13 +341,12 @@ export default function SessionChatScreen() {
         if (data.model) {
           setModel({ providerID: data.model.providerID, modelID: data.model.id });
         }
-        if (data.agent === 'plan') {
+        const isBypassed = await getProjectBypass(bypassKey);
+        if (isBypassed) {
+          setMode('bypass');
+        } else if (data.agent === 'plan') {
           setMode('plan');
-        } else if (data.agent === 'build') {
-          // "auto" não existe no servidor (é só um atalho local pra
-          // auto-aceitar permissões) — 'build' vira 'manual' por
-          // padrão, nunca 'auto', pra não auto-aprovar nada nesse
-          // aparelho sem o usuário escolher isso explicitamente aqui.
+        } else if (data.agent === 'build' && modeRef.current === 'plan') {
           setMode('manual');
         }
       })
@@ -372,8 +419,10 @@ export default function SessionChatScreen() {
               }
               if (info.agent === 'plan') {
                 setMode('plan');
-              } else if (info.agent === 'build' && modeRef.current !== 'auto') {
-                setMode('manual');
+              } else if (info.agent === 'build' && modeRef.current === 'plan') {
+                getProjectBypass(bypassKey).then((isBypassed) => {
+                  setMode(isBypassed ? 'bypass' : 'manual');
+                });
               }
             }
             // Subagent (criado pela tool `task` — ver
@@ -407,7 +456,7 @@ export default function SessionChatScreen() {
           } else if (event.type === 'permission.asked') {
             const req = (event as { properties: PermissionRequest }).properties;
             if (req.sessionID !== sessionId) continue;
-            if (modeRef.current === 'auto') {
+            if (shouldAutoApprove(modeRef.current, req.permission)) {
               replyPermission(server, token, req.id, 'always').catch(() => {});
               continue;
             }
@@ -507,16 +556,27 @@ export default function SessionChatScreen() {
     };
   }, [server, token, sessionId]);
 
-  // Flush de pedidos que já estavam na fila antes de trocar pra
-  // "Automático" (ex.: carregados no GET /permission inicial).
+  // Flush de pedidos que já estavam na fila ao trocar de modo
+  // (ex.: mudou pra "Automático", "Aceitar edições" ou "Ignorar permissões").
   useEffect(() => {
-    if (mode !== 'auto' || !server || !token || permissionQueue.length === 0) return;
-    const toFlush = permissionQueue;
-    setPermissionQueue([]);
+    if (!server || !token || permissionQueue.length === 0) return;
+    const toFlush = permissionQueue.filter((req) => shouldAutoApprove(mode, req.permission));
+    if (toFlush.length === 0) return;
+    setPermissionQueue((prev) => prev.filter((req) => !shouldAutoApprove(mode, req.permission)));
     for (const req of toFlush) {
       replyPermission(server, token, req.id, 'always').catch(() => {});
     }
   }, [mode, server, token, permissionQueue]);
+
+  function handleSelectMode(m: Mode) {
+    setMode(m);
+    if (m === 'bypass') {
+      setProjectBypass(bypassKey, true).catch(() => {});
+    } else {
+      setProjectBypass(bypassKey, false).catch(() => {});
+    }
+    setShowModePicker(false);
+  }
 
   const commandSuggestions =
     draft.startsWith('/') && !draft.includes(' ')
@@ -1132,9 +1192,28 @@ export default function SessionChatScreen() {
           </Text>
           <Text style={styles.dropdownCaret}>▾</Text>
         </TouchableOpacity>
-        <TouchableOpacity style={styles.dropdownChip} onPress={() => setShowModePicker(true)}>
-          <Text style={styles.dropdownChipText}>{MODE_LABEL[mode]}</Text>
-          <Text style={styles.dropdownCaret}>▾</Text>
+        <TouchableOpacity
+          style={[
+            styles.dropdownChip,
+            mode === 'bypass' && { borderColor: theme.amber, backgroundColor: theme.warnBg },
+          ]}
+          onPress={() => setShowModePicker(true)}
+        >
+          <Ionicons
+            name={MODE_ICON[mode]}
+            size={14}
+            color={mode === 'bypass' ? theme.amber : theme.textDim}
+            style={{ marginRight: 4 }}
+          />
+          <Text
+            style={[
+              styles.dropdownChipText,
+              mode === 'bypass' && { color: theme.amber, fontWeight: '600' },
+            ]}
+          >
+            {MODE_LABEL[mode]}
+          </Text>
+          <Text style={[styles.dropdownCaret, mode === 'bypass' && { color: theme.amber }]}>▾</Text>
         </TouchableOpacity>
       </View>
 
@@ -1142,21 +1221,55 @@ export default function SessionChatScreen() {
         <TouchableOpacity style={styles.modalBackdrop} activeOpacity={1} onPress={() => setShowModePicker(false)}>
           <View style={styles.modalSheet}>
             <View style={styles.modalGrabber} />
-            {(['manual', 'plan', 'auto'] as Mode[]).map((m) => (
-              <TouchableOpacity
-                key={m}
-                style={styles.modalOption}
-                onPress={() => {
-                  setMode(m);
-                  setShowModePicker(false);
-                }}
-              >
-                <Text style={[styles.modalOptionText, mode === m && styles.modalOptionTextActive]}>
-                  {MODE_LABEL[m]}
+            <Text style={[styles.modalTitle, { color: theme.text }]}>Selecionar modo</Text>
+
+            <View style={styles.modeGroup}>
+              {(['auto', 'manual', 'edits', 'plan'] as Mode[]).map((m) => {
+                const active = mode === m;
+                return (
+                  <TouchableOpacity
+                    key={m}
+                    style={[styles.modeOptionRow, active && styles.modeOptionRowActive]}
+                    onPress={() => handleSelectMode(m)}
+                  >
+                    <View style={[styles.modeIconContainer, { backgroundColor: theme.bgAlt }]}>
+                      <Ionicons name={MODE_ICON[m]} size={18} color={active ? theme.accent : theme.textDim} />
+                    </View>
+                    <View style={styles.modeTextContainer}>
+                      <Text style={[styles.modeTitleText, active && { color: theme.accent, fontWeight: '600' }]}>
+                        {MODE_LABEL[m]}
+                      </Text>
+                      <Text style={styles.modeDescText}>{MODE_DESCRIPTION[m]}</Text>
+                    </View>
+                    {active && <Ionicons name="checkmark" size={18} color={theme.accent} />}
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+
+            <View style={styles.modeSeparator} />
+            <Text style={styles.modalGroupLabel}>Neste diretório</Text>
+
+            <TouchableOpacity
+              style={[styles.modeOptionRow, mode === 'bypass' && styles.modeOptionRowActive]}
+              onPress={() => handleSelectMode('bypass')}
+            >
+              <View style={[styles.modeIconContainer, { backgroundColor: theme.warnBg }]}>
+                <Ionicons name="warning-outline" size={18} color={theme.amber} />
+              </View>
+              <View style={styles.modeTextContainer}>
+                <Text
+                  style={[
+                    styles.modeTitleText,
+                    mode === 'bypass' && { color: theme.amber, fontWeight: '600' },
+                  ]}
+                >
+                  {MODE_LABEL.bypass}
                 </Text>
-                {mode === m && <Ionicons name="checkmark" size={18} color={theme.accent} />}
-              </TouchableOpacity>
-            ))}
+                <Text style={styles.modeDescText}>{MODE_DESCRIPTION.bypass}</Text>
+              </View>
+              {mode === 'bypass' && <Ionicons name="checkmark" size={18} color={theme.amber} />}
+            </TouchableOpacity>
           </View>
         </TouchableOpacity>
       </Modal>
@@ -1579,6 +1692,45 @@ function createStyles(theme: Theme) {
     modalOptionTextActive: {
       color: theme.accent,
       fontWeight: '600',
+    },
+    modeGroup: {
+      marginTop: 4,
+    },
+    modeOptionRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      paddingHorizontal: 16,
+      paddingVertical: 10,
+      gap: 12,
+    },
+    modeOptionRowActive: {
+      backgroundColor: theme.bgAlt,
+    },
+    modeIconContainer: {
+      width: 32,
+      height: 32,
+      borderRadius: 8,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    modeTextContainer: {
+      flex: 1,
+    },
+    modeTitleText: {
+      fontSize: 15,
+      fontWeight: '500',
+      color: theme.text,
+    },
+    modeDescText: {
+      fontSize: 12,
+      color: theme.textFaint,
+      marginTop: 2,
+    },
+    modeSeparator: {
+      height: StyleSheet.hairlineWidth,
+      backgroundColor: theme.border,
+      marginVertical: 6,
+      marginHorizontal: 16,
     },
     suggestions: {
       marginHorizontal: 12,

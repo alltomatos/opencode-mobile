@@ -105,11 +105,37 @@ export function useSettings(): SettingsContextValue {
 // mesmo projeto) deve manter o modelo escolhido em vez de cair de
 // volta no padrão do servidor.
 const PROJECT_MODEL_PREFIX = 'opencode-mobile:model:';
+const PROJECT_BYPASS_PREFIX = 'opencode-mobile:bypass:';
 
 export type ProjectModel = { providerID: string; modelID: string };
 
 export function projectModelKey(serverId: string, directory: string): string {
   return `${PROJECT_MODEL_PREFIX}${serverId}:${directory}`;
+}
+
+export function projectBypassKey(serverId: string, directory: string): string {
+  return `${PROJECT_BYPASS_PREFIX}${serverId}:${directory}`;
+}
+
+export async function getProjectBypass(key: string): Promise<boolean> {
+  try {
+    const raw = await AsyncStorage.getItem(key);
+    return raw === 'true';
+  } catch {
+    return false;
+  }
+}
+
+export async function setProjectBypass(key: string, bypass: boolean): Promise<void> {
+  try {
+    if (bypass) {
+      await AsyncStorage.setItem(key, 'true');
+    } else {
+      await AsyncStorage.removeItem(key);
+    }
+  } catch {
+    // Falha silenciosa de storage
+  }
 }
 
 export async function getProjectModel(key: string): Promise<ProjectModel | null> {
