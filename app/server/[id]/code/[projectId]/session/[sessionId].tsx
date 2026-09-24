@@ -19,6 +19,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import {
+  Combo,
   Command,
   FilePart,
   getSession,
@@ -26,6 +27,7 @@ import {
   ImageAttachment,
   listChildren,
   listCommands,
+  listCombos,
   listMessages,
   listPermissions,
   listProviders,
@@ -210,6 +212,7 @@ export default function SessionChatScreen() {
     };
   }, []);
   const [providers, setProviders] = useState<ProviderList | null>(null);
+  const [combos, setCombos] = useState<Combo[]>([]);
   const [model, setModel] = useState<SelectedModel | null>(null);
   const [showModePicker, setShowModePicker] = useState(false);
   const [showModelPicker, setShowModelPicker] = useState(false);
@@ -312,6 +315,9 @@ export default function SessionChatScreen() {
       .catch(() => {});
     listCommands(server, token)
       .then((data) => !cancelled && setCommands(data))
+      .catch(() => {});
+    listCombos(server, token)
+      .then((data) => !cancelled && setCombos(data))
       .catch(() => {});
     // Prioridade: modelo salvo pra esse projeto (setado numa sessão
     // anterior) > default do servidor. Sem isso, toda sessão nova (ou
@@ -812,8 +818,9 @@ export default function SessionChatScreen() {
     m.parts.some((p) => p.type === 'tool' && (p as ToolPart).state.status === 'running')
   );
   const headerTitle = sessionTitle || 'Sessão';
+  const selectedCombo = model?.providerID === 'combo' ? combos.find((c) => c.id === model.modelID) : null;
   const selectedModelInfo = model && providers?.all.find((p) => p.id === model.providerID)?.models[model.modelID];
-  const modelLabel = selectedModelInfo?.name ?? 'Modelo padrão';
+  const modelLabel = selectedCombo ? `Combo: ${selectedCombo.name}` : (selectedModelInfo?.name ?? 'Modelo padrão');
 
   if (server === undefined || messages === null) {
     return (
@@ -1205,6 +1212,45 @@ export default function SessionChatScreen() {
               )}
             </View>
             <ScrollView style={styles.modelListScroll} keyboardShouldPersistTaps="handled">
+              {/* Seção Combos */}
+              {(() => {
+                const query = modelQuery.trim().toLowerCase();
+                const filteredCombos = (combos ?? []).filter(
+                  (c) => !query || c.name.toLowerCase().includes(query) || c.id.toLowerCase().includes(query)
+                );
+                if (filteredCombos.length === 0) return null;
+                return (
+                  <View key="combos-group">
+                    <Text style={styles.modalGroupLabel}>Combos Especialistas</Text>
+                    {filteredCombos.map((c) => {
+                      const active = model?.providerID === 'combo' && model?.modelID === c.id;
+                      return (
+                        <TouchableOpacity
+                          key={c.id}
+                          style={styles.modalOption}
+                          onPress={() => {
+                            const next = { providerID: 'combo', modelID: c.id };
+                            setModel(next);
+                            setProjectModel(modelKey, next).catch(() => {});
+                            setShowModelPicker(false);
+                          }}
+                        >
+                          <View style={{ flex: 1 }}>
+                            <Text style={[styles.modalOptionText, active && styles.modalOptionTextActive]}>
+                              {c.name}
+                            </Text>
+                            <Text style={{ fontSize: 11, color: theme.textDim, marginTop: 2 }}>
+                              {c.models.length} modelos · {c.failover?.strategy === 'round-robin' ? 'Round-Robin' : 'Prioridade'}
+                            </Text>
+                          </View>
+                          {active && <Ionicons name="checkmark" size={18} color={theme.accent} />}
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </View>
+                );
+              })()}
+
               {(providers?.all ?? [])
                 .filter((p) => providers?.connected.includes(p.id))
                 .map((provider) => {
@@ -1240,6 +1286,11 @@ export default function SessionChatScreen() {
                   );
                 })}
               {modelQuery.trim() &&
+                (combos ?? []).every(
+                  (c) =>
+                    !c.name.toLowerCase().includes(modelQuery.trim().toLowerCase()) &&
+                    !c.id.toLowerCase().includes(modelQuery.trim().toLowerCase())
+                ) &&
                 (providers?.all ?? []).every(
                   (p) =>
                     !providers?.connected.includes(p.id) ||
