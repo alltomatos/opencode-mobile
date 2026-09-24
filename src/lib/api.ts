@@ -1337,11 +1337,21 @@ export type ScheduleTrigger = CronTrigger | IntervalTrigger | ManualTrigger;
 export type ShellAction = { kind: 'shell'; command: string; timeoutMs?: number };
 export type McpToolAction = { kind: 'mcp_tool'; server: string; tool: string; args?: Record<string, unknown>; timeoutMs?: number };
 export type SkillMcpTool = { server: string; tool: string };
-export type SkillAction = { kind: 'skill'; instructions: string; mcpTools?: SkillMcpTool[] };
+export type SkillAction = {
+  kind: 'skill';
+  instructions: string;
+  mcpTools?: SkillMcpTool[];
+  workspaces?: string[];
+  model?: string;
+  permission?: 'auto' | 'bypass' | 'default';
+  timeoutMs?: number;
+};
 export type ScheduleAction = ShellAction | McpToolAction | SkillAction;
 
 export type Schedule = {
   id: string;
+  name?: string;
+  description?: string;
   trigger: ScheduleTrigger;
   action: ScheduleAction;
   workspace?: string;
@@ -1349,9 +1359,12 @@ export type Schedule = {
   lastRunAt?: number;
   lastStatus?: 'success' | 'error';
   lastError?: string;
+  lastSessionId?: string;
 };
 
 export type ScheduleCreateInput = {
+  name?: string;
+  description?: string;
   trigger: ScheduleTrigger;
   action: ScheduleAction;
   workspace?: string;

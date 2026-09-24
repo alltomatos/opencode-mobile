@@ -3,12 +3,10 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
-  Alert,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
   StyleSheet,
-  Switch,
   Text,
   TextInput,
   TouchableOpacity,
@@ -30,9 +28,10 @@ import {
 import { getServerToken, listServers, ServerConnection } from '../../../../src/lib/servers';
 import { Theme, useTheme } from '../../../../src/lib/theme';
 
-type TriggerKind = 'daily' | 'interval' | 'manual';
-type ActionKind = 'skill' | 'shell';
+type TriggerKind = 'daily' | 'interval' | 'cron' | 'manual';
+type ActionKind = 'skill' | 'shell' | 'mcp_tool';
 type IntervalUnit = 'minutes' | 'hours';
+type PermissionMode = 'auto' | 'bypass' | 'default';
 
 export default function NewRoutineScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -44,18 +43,25 @@ export default function NewRoutineScreen() {
   const [token, setToken] = useState<string | null>(null);
   const [projects, setProjects] = useState<ProjectFolder[]>([]);
 
+  const [name, setName] = useState('');
+  const [description, setDescription] = useState('');
+
   const [triggerKind, setTriggerKind] = useState<TriggerKind>('daily');
   const [dailyHour, setDailyHour] = useState('09');
   const [dailyMinute, setDailyMinute] = useState('00');
   const [intervalAmount, setIntervalAmount] = useState('30');
   const [intervalUnit, setIntervalUnit] = useState<IntervalUnit>('minutes');
+  const [cronExpr, setCronExpr] = useState('0 9 * * 1-5');
 
   const [actionKind, setActionKind] = useState<ActionKind>('skill');
   const [instructions, setInstructions] = useState('');
   const [shellCommand, setShellCommand] = useState('');
+  const [permissionMode, setPermissionMode] = useState<PermissionMode>('auto');
 
   const [availableMcpTools, setAvailableMcpTools] = useState<{ server: string; tool: string; desc?: string }[]>([]);
   const [selectedMcpTools, setSelectedMcpTools] = useState<SkillMcpTool[]>([]);
+  const [selectedSingleMcp, setSelectedSingleMcp] = useState<string>('');
+  const [mcpArgsJson, setMcpArgsJson] = useState('');
   const [loadingMcp, setLoadingMcp] = useState(false);
 
   const [selectedWorkspace, setSelectedWorkspace] = useState<string | null>(null);
@@ -81,7 +87,7 @@ export default function NewRoutineScreen() {
         const mcpMap = await listMcpStatus(found, t);
         const connectedServers = Object.entries(mcpMap)
           .filter(([, val]) => val.status === 'connected')
-          .map(([name]) => name);
+          .map(([sName]) => sName);
 
         const toolsList: { server: string; tool: string; desc?: string }[] = [];
         for (const sName of connectedServers) {
@@ -93,6 +99,9 @@ export default function NewRoutineScreen() {
           } catch {}
         }
         setAvailableMcpTools(toolsList);
+        if (toolsList.length > 0) {
+          setSelectedSingleMcp(toolsList[0].server + '/' + toolsList[0].tool);
+        }
       } catch {} finally {
         setLoadingMcp(false);
       }
@@ -117,12 +126,15 @@ export default function NewRoutineScreen() {
     if (triggerKind === 'daily') {
       const h = parseInt(dailyHour, 10) || 0;
       const m = parseInt(dailyMinute, 10) || 0;
-      return { kind: 'cron', expr: m + ' ' + h + ' * * *' };
+      return { kind: 'cron', expr: `${m} ${h} * * *` };
     }
     if (triggerKind === 'interval') {
       const amt = parseInt(intervalAmount, 10) || 1;
       const ms = intervalUnit === 'hours' ? amt * 3600000 : amt * 60000;
       return { kind: 'interval', ms };
+    }
+    if (triggerKind === 'cron') {
+      return { kind: 'cron', expr: cronExpr.trim() || '0 9 * * *' };
     }
     return { kind: 'manual' };
   }
@@ -131,16 +143,41 @@ export default function NewRoutineScreen() {
     if (actionKind === 'shell') {
       return { kind: 'shell', command: shellCommand.trim() };
     }
+    if (actionKind === 'mcp_tool') {
+      const [sName, ...rest] = selectedSingleMcp.split('/');
+      const tName = rest.join('/');
+      let parsedArgs: Record<string, unknown> | undefined;
+      if (mcpArgsJson.trim()) {
+        try {
+          parsedArgs = JSON.parse(mcpArgsJson);
+        } catch {}
+      }
+      return {
+        kind: 'mcp_tool',
+        server: sName,
+        tool: tName,
+        args: parsedArgs,
+      };
+    }
     return {
       kind: 'skill',
       instructions: instructions.trim(),
+      permission: permissionMode,
       mcpTools: selectedMcpTools.length > 0 ? selectedMcpTools : undefined,
     };
   }
 
   const canSave =
-    (actionKind === 'shell' ? shellCommand.trim().length > 0 : instructions.trim().length > 0) &&
-    (triggerKind === 'interval' ? parseInt(intervalAmount, 10) > 0 : true);
+    (actionKind === 'shell'
+      ? shellCommand.trim().length > 0
+      : actionKind === 'mcp_tool'
+      ? selectedSingleMcp.length > 0
+      : instructions.trim().length > 0) &&
+    (triggerKind === 'interval'
+      ? parseInt(intervalAmount, 10) > 0
+      : triggerKind === 'cron'
+      ? cronExpr.trim().length > 0
+      : true);
 
   async function handleSave() {
     if (!server || !token || !canSave || saving) return;
@@ -148,6 +185,8 @@ export default function NewRoutineScreen() {
     setError(null);
     try {
       const input: ScheduleCreateInput = {
+        name: name.trim() || undefined,
+        description: description.trim() || undefined,
         trigger: buildTrigger(),
         action: buildAction(),
         workspace: selectedWorkspace ?? undefined,
@@ -179,12 +218,41 @@ export default function NewRoutineScreen() {
           </View>
         )}
 
+        {/* IDENTIFICAÇÃO */}
+        <View style={styles.card}>
+          <Text style={styles.sectionHeader}>IDENTIFICAÇÃO (OPCIONAL)</Text>
+          <Text style={styles.fieldLabel}>Nome da rotina:</Text>
+          <TextInput
+            style={styles.input}
+            value={name}
+            onChangeText={setName}
+            placeholder="Ex.: Auditoria de Código & Testes"
+            placeholderTextColor={theme.placeholder}
+          />
+          <Text style={[styles.fieldLabel, { marginTop: 12 }]}>Descrição:</Text>
+          <TextInput
+            style={styles.input}
+            value={description}
+            onChangeText={setDescription}
+            placeholder="Ex.: Executa verificação diária e notifica no Discord"
+            placeholderTextColor={theme.placeholder}
+          />
+        </View>
+
+        {/* QUANDO */}
         <View style={styles.card}>
           <Text style={styles.sectionHeader}>QUANDO EXECUTAR</Text>
           <View style={styles.segmented}>
-            {(['daily', 'interval', 'manual'] as const).map((kind) => {
+            {(['daily', 'interval', 'cron', 'manual'] as const).map((kind) => {
               const active = triggerKind === kind;
-              const label = kind === 'daily' ? 'Todo dia' : kind === 'interval' ? 'A cada' : 'Manual';
+              const label =
+                kind === 'daily'
+                  ? 'Todo dia'
+                  : kind === 'interval'
+                  ? 'A cada'
+                  : kind === 'cron'
+                  ? 'Cron'
+                  : 'Manual';
               return (
                 <TouchableOpacity
                   key={kind}
@@ -256,6 +324,22 @@ export default function NewRoutineScreen() {
             </View>
           )}
 
+          {triggerKind === 'cron' && (
+            <View style={styles.triggerConfigRow}>
+              <Text style={styles.fieldLabel}>Expressão Cron:</Text>
+              <TextInput
+                style={[styles.input, styles.monoInput]}
+                value={cronExpr}
+                onChangeText={setCronExpr}
+                placeholder="0 9 * * 1-5"
+                placeholderTextColor={theme.placeholder}
+                autoCapitalize="none"
+                autoCorrect={false}
+              />
+              <Text style={styles.hintText}>Formato padrão: minuto hora dia mês dia-da-semana</Text>
+            </View>
+          )}
+
           {triggerKind === 'manual' && (
             <Text style={styles.hintText}>
               A rotina não terá agendamento automático. Você poderá dispará-la a qualquer momento pelo botão "Rodar".
@@ -263,12 +347,18 @@ export default function NewRoutineScreen() {
           )}
         </View>
 
+        {/* COMO / O QUE FAZER */}
         <View style={styles.card}>
-          <Text style={styles.sectionHeader}>O QUE FAZER</Text>
+          <Text style={styles.sectionHeader}>O QUE FAZER (COMO)</Text>
           <View style={styles.segmented}>
-            {(['skill', 'shell'] as const).map((kind) => {
+            {(['skill', 'shell', 'mcp_tool'] as const).map((kind) => {
               const active = actionKind === kind;
-              const label = kind === 'skill' ? 'Instruções do Agente' : 'Comando Shell';
+              const label =
+                kind === 'skill'
+                  ? 'Agente IA'
+                  : kind === 'shell'
+                  ? 'Terminal Shell'
+                  : 'Ferramenta MCP';
               return (
                 <TouchableOpacity
                   key={kind}
@@ -281,7 +371,7 @@ export default function NewRoutineScreen() {
             })}
           </View>
 
-          {actionKind === 'skill' ? (
+          {actionKind === 'skill' && (
             <View style={styles.actionBody}>
               <Text style={styles.fieldLabel}>Instruções para o agente IA:</Text>
               <TextInput
@@ -292,6 +382,23 @@ export default function NewRoutineScreen() {
                 placeholderTextColor={theme.placeholder}
                 multiline
               />
+
+              <Text style={[styles.fieldLabel, { marginTop: 12 }]}>Modo de Permissões:</Text>
+              <View style={styles.segmented}>
+                {(['auto', 'default', 'bypass'] as const).map((mode) => {
+                  const active = permissionMode === mode;
+                  const label = mode === 'auto' ? 'Automático' : mode === 'bypass' ? 'Ignorar' : 'Padrão';
+                  return (
+                    <TouchableOpacity
+                      key={mode}
+                      style={[styles.segment, active && styles.segmentActive]}
+                      onPress={() => setPermissionMode(mode)}
+                    >
+                      <Text style={[styles.segmentText, active && styles.segmentTextActive]}>{label}</Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
 
               {availableMcpTools.length > 0 && (
                 <View style={styles.mcpSection}>
@@ -320,7 +427,9 @@ export default function NewRoutineScreen() {
                 </View>
               )}
             </View>
-          ) : (
+          )}
+
+          {actionKind === 'shell' && (
             <View style={styles.actionBody}>
               <Text style={styles.fieldLabel}>Comando de terminal:</Text>
               <TextInput
@@ -334,11 +443,50 @@ export default function NewRoutineScreen() {
               />
             </View>
           )}
+
+          {actionKind === 'mcp_tool' && (
+            <View style={styles.actionBody}>
+              <Text style={styles.fieldLabel}>Ferramenta MCP:</Text>
+              {availableMcpTools.length === 0 ? (
+                <Text style={styles.hintText}>Nenhuma ferramenta MCP conectada no servidor.</Text>
+              ) : (
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.projectScroll}>
+                  {availableMcpTools.map((t) => {
+                    const key = t.server + '/' + t.tool;
+                    const active = selectedSingleMcp === key;
+                    return (
+                      <TouchableOpacity
+                        key={key}
+                        style={[styles.projectChip, active && styles.projectChipSelected]}
+                        onPress={() => setSelectedSingleMcp(key)}
+                      >
+                        <Text style={[styles.projectChipText, active && styles.projectChipTextSelected]}>
+                          {key}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </ScrollView>
+              )}
+              <Text style={[styles.fieldLabel, { marginTop: 12 }]}>Argumentos JSON (opcional):</Text>
+              <TextInput
+                style={[styles.input, styles.monoInput, { height: 72 }]}
+                value={mcpArgsJson}
+                onChangeText={setMcpArgsJson}
+                placeholder='{"query": "status"}'
+                placeholderTextColor={theme.placeholder}
+                autoCapitalize="none"
+                autoCorrect={false}
+                multiline
+              />
+            </View>
+          )}
         </View>
 
+        {/* POR ONDE / PROJETO ALVO */}
         {projects.length > 0 && (
           <View style={styles.card}>
-            <Text style={styles.sectionHeader}>PROJETO ALVO (OPCIONAL)</Text>
+            <Text style={styles.sectionHeader}>PROJETO ALVO (POR ONDE)</Text>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.projectScroll}>
               <TouchableOpacity
                 style={[styles.projectChip, selectedWorkspace === null && styles.projectChipSelected]}
@@ -397,40 +545,27 @@ function createStyles(theme: Theme) {
       padding: 16,
       gap: 16,
     },
-    errorBox: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 8,
-      backgroundColor: theme.dangerBg,
-      padding: 12,
-      borderRadius: 10,
-    },
-    errorText: {
-      flex: 1,
-      color: theme.danger,
-      fontSize: 13,
-    },
     card: {
       backgroundColor: theme.surface,
       borderRadius: 14,
       padding: 16,
-      gap: 12,
       borderWidth: StyleSheet.hairlineWidth,
       borderColor: theme.border,
+      gap: 12,
     },
     sectionHeader: {
       fontSize: 12,
-      fontWeight: '700',
-      color: theme.textFaint,
-      textTransform: 'uppercase',
-      letterSpacing: 0.4,
+      fontWeight: '600',
+      color: theme.textDim,
+      letterSpacing: 0.5,
     },
     segmented: {
       flexDirection: 'row',
       backgroundColor: theme.bgAlt,
       borderRadius: 9,
-      padding: 2,
+      padding: 3,
       gap: 2,
+      marginTop: 4,
     },
     segment: {
       flex: 1,
@@ -439,20 +574,16 @@ function createStyles(theme: Theme) {
       alignItems: 'center',
     },
     segmentActive: {
-      backgroundColor: theme.surface,
-      shadowColor: '#000',
-      shadowOffset: { width: 0, height: 1 },
-      shadowOpacity: 0.1,
-      shadowRadius: 2,
-      elevation: 2,
+      backgroundColor: theme.accent,
     },
     segmentText: {
       fontSize: 13,
-      fontWeight: '600',
+      fontWeight: '500',
       color: theme.textDim,
     },
     segmentTextActive: {
-      color: theme.accent,
+      color: theme.accentText,
+      fontWeight: '600',
     },
     triggerConfigRow: {
       gap: 8,
@@ -460,7 +591,7 @@ function createStyles(theme: Theme) {
     },
     fieldLabel: {
       fontSize: 13,
-      fontWeight: '600',
+      fontWeight: '500',
       color: theme.text,
     },
     timeInputsRow: {
@@ -471,13 +602,15 @@ function createStyles(theme: Theme) {
     timeInput: {
       backgroundColor: theme.bgAlt,
       borderRadius: 8,
+      borderWidth: StyleSheet.hairlineWidth,
+      borderColor: theme.border,
       paddingHorizontal: 12,
       paddingVertical: 8,
-      fontSize: 16,
+      fontSize: 18,
       fontWeight: '600',
       color: theme.text,
       textAlign: 'center',
-      minWidth: 48,
+      width: 52,
     },
     timeSeparator: {
       fontSize: 20,
@@ -490,9 +623,9 @@ function createStyles(theme: Theme) {
       gap: 10,
     },
     hintText: {
-      fontSize: 13,
+      fontSize: 12,
       color: theme.textDim,
-      lineHeight: 18,
+      lineHeight: 17,
     },
     actionBody: {
       gap: 8,
@@ -500,44 +633,48 @@ function createStyles(theme: Theme) {
     },
     input: {
       backgroundColor: theme.bgAlt,
-      borderRadius: 10,
-      paddingHorizontal: 14,
+      borderRadius: 8,
+      borderWidth: StyleSheet.hairlineWidth,
+      borderColor: theme.border,
+      paddingHorizontal: 12,
       paddingVertical: 10,
-      fontSize: 15,
+      fontSize: 14,
       color: theme.text,
     },
     textArea: {
-      minHeight: 100,
+      height: 90,
       textAlignVertical: 'top',
     },
     monoInput: {
       fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
-      fontSize: 14,
+      fontSize: 13,
     },
     mcpSection: {
-      marginTop: 8,
       gap: 8,
+      marginTop: 6,
     },
     mcpChipGrid: {
       flexDirection: 'row',
       flexWrap: 'wrap',
-      gap: 8,
+      gap: 6,
     },
     mcpChip: {
       flexDirection: 'row',
       alignItems: 'center',
-      gap: 6,
-      backgroundColor: theme.bgAlt,
-      borderRadius: 14,
+      gap: 5,
       paddingHorizontal: 10,
       paddingVertical: 6,
+      borderRadius: 7,
+      backgroundColor: theme.bgAlt,
+      borderWidth: StyleSheet.hairlineWidth,
+      borderColor: theme.border,
     },
     mcpChipSelected: {
       backgroundColor: theme.accent,
+      borderColor: theme.accent,
     },
     mcpChipText: {
       fontSize: 12,
-      fontWeight: '500',
       color: theme.textDim,
     },
     mcpChipTextSelected: {
@@ -545,57 +682,77 @@ function createStyles(theme: Theme) {
       fontWeight: '600',
     },
     projectScroll: {
-      flexDirection: 'row',
-      gap: 8,
+      marginTop: 4,
     },
     projectChip: {
-      backgroundColor: theme.bgAlt,
-      borderRadius: 14,
       paddingHorizontal: 12,
       paddingVertical: 7,
+      borderRadius: 8,
+      backgroundColor: theme.bgAlt,
+      borderWidth: StyleSheet.hairlineWidth,
+      borderColor: theme.border,
       marginRight: 8,
     },
     projectChipSelected: {
       backgroundColor: theme.accent,
+      borderColor: theme.accent,
     },
     projectChipText: {
       fontSize: 13,
-      fontWeight: '600',
       color: theme.textDim,
     },
     projectChipTextSelected: {
       color: theme.accentText,
+      fontWeight: '600',
     },
     footerRow: {
       flexDirection: 'row',
-      justifyContent: 'flex-end',
       gap: 12,
       marginTop: 8,
     },
     cancelBtn: {
-      paddingVertical: 12,
-      paddingHorizontal: 20,
-      borderRadius: 12,
-      backgroundColor: theme.bgAlt,
+      flex: 1,
+      paddingVertical: 14,
+      borderRadius: 10,
+      borderWidth: StyleSheet.hairlineWidth,
+      borderColor: theme.border,
+      alignItems: 'center',
+      backgroundColor: theme.surface,
     },
     cancelBtnText: {
       fontSize: 15,
-      fontWeight: '600',
-      color: theme.textDim,
+      fontWeight: '500',
+      color: theme.text,
     },
     saveBtn: {
-      paddingVertical: 12,
-      paddingHorizontal: 24,
-      borderRadius: 12,
+      flex: 2,
+      paddingVertical: 14,
+      borderRadius: 10,
+      alignItems: 'center',
       backgroundColor: theme.accent,
     },
     saveBtnDisabled: {
-      backgroundColor: theme.accentDim,
+      opacity: 0.5,
     },
     saveBtnText: {
       fontSize: 15,
       fontWeight: '600',
       color: theme.accentText,
+    },
+    errorBox: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+      backgroundColor: theme.dangerBg,
+      padding: 12,
+      borderRadius: 10,
+      borderWidth: StyleSheet.hairlineWidth,
+      borderColor: theme.danger,
+    },
+    errorText: {
+      flex: 1,
+      fontSize: 13,
+      color: theme.danger,
     },
   });
 }

@@ -190,13 +190,29 @@ export default function RoutinesScreen() {
               const isSuccess = item.lastStatus === 'success';
               const isError = item.lastStatus === 'error';
 
+              const icon =
+                item.action.kind === 'shell'
+                  ? 'terminal-outline'
+                  : item.action.kind === 'mcp_tool'
+                  ? 'cube-outline'
+                  : 'sparkles-outline';
+              const iconColor =
+                item.action.kind === 'shell'
+                  ? '#ff9500'
+                  : item.action.kind === 'mcp_tool'
+                  ? theme.accent
+                  : theme.purple;
+
+              const title = item.name || triggerSummary;
+              const subtitle = item.name ? `${triggerSummary} · ${actionSummary}` : actionSummary;
+
               return (
                 <View key={item.id} style={styles.cardWrapper}>
                   <Row
-                    icon={item.action.kind === 'shell' ? 'terminal-outline' : 'sparkles-outline'}
-                    iconColor={item.action.kind === 'shell' ? '#ff9500' : theme.purple}
-                    title={triggerSummary}
-                    subtitle={actionSummary}
+                    icon={icon}
+                    iconColor={iconColor}
+                    title={title}
+                    subtitle={subtitle}
                     last={false}
                   />
 
