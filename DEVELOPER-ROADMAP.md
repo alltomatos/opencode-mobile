@@ -20,13 +20,13 @@
   - Interface por voz duplex em tempo real (Breniac) com acessibilidade 100% acionável por voz para pessoas com tetraplegia.
 - [x] [**[E07] Rotinas / Agendamentos (Schedules) Mobile**](https://github.com/alltomatos/opencode-mobile/issues/16) — `done`
   - Portar módulo inicial de Rotinas (agendamentos de shell, instruções de agente e MCP tools), visualização, disparo manual sob demanda e criação no celular.
-- [ ] [**[E08] Sincronização em Tempo Real SSE V2 & Streaming de Sessões**](https://github.com/alltomatos/opencode-mobile/issues/22) — `todo`
+- [x] [**[E08] Sincronização em Tempo Real SSE V2 & Streaming de Sessões**](https://github.com/alltomatos/opencode-mobile/issues/22) — `done`
   - Consumo reativo de eventos SSE (`GET /event`), streaming de reasoning e tool parts, reconexão resiliente e sincronização de modelo/agente da sessão ativa.
-- [ ] [**[E09] Rotinas V2 (Quando / Como / Por Onde) & Suporte a Skills/MCP**](https://github.com/alltomatos/opencode-mobile/issues/23) — `todo`
+- [x] [**[E09] Rotinas V2 (Quando / Como / Por Onde) & Suporte a Skills/MCP**](https://github.com/alltomatos/opencode-mobile/issues/23) — `done`
   - Atualização para o novo motor de rotinas V2 com múltiplos horários, cron OR, ações de prompt/skill/mcp_tool e auto-cura por timeout.
-- [ ] [**[E10] Provedores E18, Combos Especialistas & Raciocínio Estendido**](https://github.com/alltomatos/opencode-mobile/issues/24) — `todo`
+- [x] [**[E10] Provedores E18, Combos Especialistas & Raciocínio Estendido**](https://github.com/alltomatos/opencode-mobile/issues/24) — `done`
   - Suporte a Combos com cadeias de prioridade/fallback, visualização de cotas/cooldown multi-contas (AGY/Kiro) e controle de raciocínio estendido.
-- [ ] [**[E11] AgentUI Audit Logs & Monitoramento Batuta Live**](https://github.com/alltomatos/opencode-mobile/issues/25) — `todo`
+- [x] [**[E11] AgentUI Audit Logs & Monitoramento Batuta Live**](https://github.com/alltomatos/opencode-mobile/issues/25) — `done`
   - Visualização de logs de auditoria WhatsApp (izapia) e Telegram, com monitoramento dos workers do Batuta.
 
 ---
@@ -46,4 +46,4 @@
 ### Milestone 3: Sincronização em Tempo Real & Provedores V2 (v3.0)
 - **Foco**: SSE V2 reativo, Rotinas Quando/Como/Por Onde, Combos E18 e Auditoria AgentUI.
 - **Epics associados**: [E08], [E09], [E10], [E11]
-- **Status**: `in_progress`
+- **Status**: `done`
