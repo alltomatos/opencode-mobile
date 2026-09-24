@@ -361,6 +361,14 @@ export default function SessionChatScreen() {
             if (sessionID === sessionId) {
               setSessionTitle(info.title);
               setSessionData(info);
+              if (info.model) {
+                setModel({ providerID: info.model.providerID, modelID: info.model.id });
+              }
+              if (info.agent === 'plan') {
+                setMode('plan');
+              } else if (info.agent === 'build' && modeRef.current !== 'auto') {
+                setMode('manual');
+              }
             }
             // Subagent (criado pela tool `task` — ver
             // docs/prd/mobile-app.md §3, item 2): parentID aponta pra
@@ -370,6 +378,13 @@ export default function SessionChatScreen() {
                 const rest = prev.filter((c) => c.id !== info.id);
                 return [...rest, info];
               });
+            }
+          } else if (event.type === 'session.deleted') {
+            const { sessionID } = (event as { properties: { sessionID: string } }).properties;
+            if (sessionID === sessionId) {
+              setError('Esta sessão foi encerrada ou removida no servidor.');
+            } else {
+              setChildren((prev) => prev.filter((c) => c.id !== sessionID));
             }
           } else if (event.type === 'message.updated') {
             const { sessionID, info } = (event as { properties: { sessionID: string; info: Message } })
@@ -418,6 +433,11 @@ export default function SessionChatScreen() {
               .properties;
             if (sessionID !== sessionId) continue;
             setSessionStatus(status.type === 'idle' ? null : status);
+            if (status.type === 'idle') {
+              getSession(server, token, sessionId)
+                .then((data) => !cancelled && setSessionData(data))
+                .catch(() => {});
+            }
             const waiter = turnWaiterRef.current;
             if (waiter) {
               if (status.type === 'busy') waiter.sawBusy = true;

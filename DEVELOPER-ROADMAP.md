@@ -1,4 +1,4 @@
-# ORCHESTRATOR-ROADMAP — Plano Estratégico
+# DEVELOPER-ROADMAP — Plano Estratégico do OpenCode Mobile
 
 > Mapa de longo prazo do repositório `opencode_mobile`. Cada Epic é vinculado a uma Issue oficial no GitHub.
 
@@ -19,7 +19,7 @@
 - [ ] [**[E06] Breniac Mobile — Assistente de Voz em Tempo Real & Acessibilidade Total**](https://github.com/alltomatos/opencode-mobile/issues/6) — `todo`
   - Interface por voz duplex em tempo real (Breniac) com acessibilidade 100% acionável por voz para pessoas com tetraplegia.
 - [x] [**[E07] Rotinas / Agendamentos (Schedules) Mobile**](https://github.com/alltomatos/opencode-mobile/issues/16) — `done`
-  - Portar módulo de Rotinas (agendamentos de shell, instruções de agente e MCP tools), visualização, disparo manual sob demanda e criação no celular.
+  - Portar módulo inicial de Rotinas (agendamentos de shell, instruções de agente e MCP tools), visualização, disparo manual sob demanda e criação no celular.
 - [ ] [**[E08] Sincronização em Tempo Real SSE V2 & Streaming de Sessões**](https://github.com/alltomatos/opencode-mobile/issues/22) — `todo`
   - Consumo reativo de eventos SSE (`GET /event`), streaming de reasoning e tool parts, reconexão resiliente e sincronização de modelo/agente da sessão ativa.
 - [ ] [**[E09] Rotinas V2 (Quando / Como / Por Onde) & Suporte a Skills/MCP**](https://github.com/alltomatos/opencode-mobile/issues/23) — `todo`
