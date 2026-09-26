@@ -802,7 +802,32 @@ export default function SessionChatScreen() {
     // Só notifica quando a fila inteira esvaziou — se ainda tem
     // mensagem enfileirada, o usuário sabe que o app continua
     // trabalhando (não faz sentido notificar "terminei" no meio).
-    notifyAgentDone(settings, sessionTitle ?? 'Sessão', {
+    let lastSnippet: string | undefined;
+    try {
+      if (messages) {
+        for (let i = messages.length - 1; i >= 0; i--) {
+          const m = messages[i];
+          if (m.info?.role === 'assistant' && m.parts) {
+            const textParts: string[] = [];
+            for (const p of m.parts) {
+              if (p.type === 'text') {
+                const tPart = p as { text?: string; synthetic?: boolean };
+                if (!tPart.synthetic && tPart.text?.trim()) {
+                  textParts.push(tPart.text.trim());
+                }
+              }
+            }
+            if (textParts.length > 0) {
+              const full = textParts.join('\n');
+              lastSnippet = full.length > 250 ? full.slice(0, 247) + '...' : full;
+              break;
+            }
+          }
+        }
+      }
+    } catch {}
+
+    notifyAgentDone(settings, sessionTitle ?? 'Sessão', lastSnippet, {
       url: sessionRoute,
       serverId: id,
       projectId,

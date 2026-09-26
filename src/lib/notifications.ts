@@ -128,8 +128,25 @@ async function notify(
   }).catch(() => {});
 }
 
-export function notifyAgentDone(settings: AppSettings, sessionTitle: string, data?: NotificationData) {
-  return notify('agentDone', settings, sessionTitle || 'Sessão', 'O agente terminou de responder.', data);
+export function notifyAgentDone(
+  settings: AppSettings,
+  sessionTitle: string,
+  responseSnippetOrData?: string | NotificationData,
+  data?: NotificationData
+) {
+  let responseSnippet: string | undefined;
+  let notifData: NotificationData | undefined = data;
+
+  if (typeof responseSnippetOrData === 'string') {
+    responseSnippet = responseSnippetOrData;
+  } else if (responseSnippetOrData && typeof responseSnippetOrData === 'object') {
+    notifData = responseSnippetOrData;
+  }
+
+  const body = responseSnippet && responseSnippet.trim()
+    ? responseSnippet.trim()
+    : 'O agente terminou de responder.';
+  return notify('agentDone', settings, sessionTitle || 'Sessão', body, notifData);
 }
 
 export function notifyPermissionAsked(settings: AppSettings, permission: string, data?: NotificationData) {

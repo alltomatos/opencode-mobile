@@ -8,8 +8,10 @@ import {
   BatutaActivity,
   getSessionStatusMap,
   listBatutaActivities,
+  listMessages,
   listPermissions,
   listQuestions,
+  MessageWithParts,
 } from './api';
 import {
   notifyAgentDone,
@@ -119,6 +121,29 @@ function notifyTurnCompleted(sessionId: string): void {
     }
     turnCompletionListeners.delete(sessionId);
   }
+}
+
+function extractLastAssistantText(messages: MessageWithParts[]): string | undefined {
+  if (!messages || messages.length === 0) return undefined;
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const m = messages[i];
+    if (m.info?.role === 'assistant' && m.parts) {
+      const textParts: string[] = [];
+      for (const p of m.parts) {
+        if (p.type === 'text') {
+          const tPart = p as { text?: string; synthetic?: boolean };
+          if (!tPart.synthetic && tPart.text?.trim()) {
+            textParts.push(tPart.text.trim());
+          }
+        }
+      }
+      if (textParts.length > 0) {
+        const full = textParts.join('\n');
+        return full.length > 250 ? full.slice(0, 247) + '...' : full;
+      }
+    }
+  }
+  return undefined;
 }
 
 export function trackActiveSession(
@@ -265,7 +290,13 @@ export async function checkActiveTasks(): Promise<boolean> {
               task.lastKnownStatus = 'busy';
             } else if (status.type === 'idle' && task.lastKnownStatus === 'busy') {
               hadUpdates = true;
-              notifyAgentDone(settings, task.sessionTitle || 'Sessão', {
+              let snippet: string | undefined;
+              try {
+                const msgs = await listMessages(server, task.token, task.sessionId);
+                snippet = extractLastAssistantText(msgs);
+              } catch {}
+
+              notifyAgentDone(settings, task.sessionTitle || 'Sessão', snippet, {
                 url: sessionUrl,
                 serverId: task.serverId,
                 projectId: task.projectId,
@@ -277,7 +308,13 @@ export async function checkActiveTasks(): Promise<boolean> {
           } else if (task.lastKnownStatus === 'busy') {
             // Se não consta mais no mapa de status como busy, considera concluído
             hadUpdates = true;
-            notifyAgentDone(settings, task.sessionTitle || 'Sessão', {
+            let snippet: string | undefined;
+            try {
+              const msgs = await listMessages(server, task.token, task.sessionId);
+              snippet = extractLastAssistantText(msgs);
+            } catch {}
+
+            notifyAgentDone(settings, task.sessionTitle || 'Sessão', snippet, {
               url: sessionUrl,
               serverId: task.serverId,
               projectId: task.projectId,
