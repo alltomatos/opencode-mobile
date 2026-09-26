@@ -17,6 +17,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import {
   addMemoryEntry,
+  backfillMemory,
   deleteProjectMemory,
   getGlobalMemoryEntries,
   getProjectMemoryEntries,
@@ -102,6 +103,7 @@ export function MemoryModal({
   const [newNote, setNewNote] = useState('');
   const [savingNote, setSavingNote] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [backfilling, setBackfilling] = useState(false);
 
   useEffect(() => {
     if (!visible) return;
@@ -169,6 +171,38 @@ export function MemoryModal({
               onMemoryChanged?.();
             } catch (err) {
               Alert.alert('Erro', err instanceof Error ? err.message : 'Falha ao promover memória.');
+            }
+          },
+        },
+      ]
+    );
+  }
+
+  async function handleBackfill() {
+    if (!server || !token || backfilling) return;
+    Alert.alert(
+      'Sintetizar Memórias de Sessões',
+      'O servidor analisará o histórico de conversas passadas para extrair automaticamente decisões, regras e fatos para a memória.',
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        {
+          text: 'Iniciar Síntese',
+          onPress: async () => {
+            setBackfilling(true);
+            try {
+              const res = await backfillMemory(server, token, {
+                directory: tab === 'project' && directory ? directory : undefined,
+              });
+              await loadMemories();
+              onMemoryChanged?.();
+              Alert.alert(
+                'Síntese Concluída',
+                `Sessões analisadas: ${res.scannedSessions}\nMemórias extraídas: ${res.extractedMemories}\nNovas no projeto: ${res.projectMemoriesAdded}\nNovas globais: ${res.globalMemoriesAdded}`
+              );
+            } catch (err) {
+              Alert.alert('Erro', err instanceof Error ? err.message : 'Falha ao executar síntese de memórias.');
+            } finally {
+              setBackfilling(false);
             }
           },
         },
@@ -316,22 +350,39 @@ export function MemoryModal({
               ))
             )}
 
-            {tab === 'project' && items.length > 0 && (
+            <View style={styles.actionButtonsContainer}>
               <TouchableOpacity
-                style={styles.forgetButton}
-                onPress={confirmForgetProjectMemory}
-                disabled={deleting}
+                style={styles.backfillButton}
+                onPress={handleBackfill}
+                disabled={backfilling}
               >
-                {deleting ? (
-                  <ActivityIndicator size="small" color={theme.danger} />
+                {backfilling ? (
+                  <ActivityIndicator size="small" color={theme.accent} />
                 ) : (
                   <>
-                    <Ionicons name="trash-outline" size={16} color={theme.danger} />
-                    <Text style={styles.forgetButtonText}>Esquecer memórias deste projeto</Text>
+                    <Ionicons name="sparkles-outline" size={16} color={theme.accent} />
+                    <Text style={styles.backfillButtonText}>Sintetizar memórias das conversas</Text>
                   </>
                 )}
               </TouchableOpacity>
-            )}
+
+              {tab === 'project' && items.length > 0 && (
+                <TouchableOpacity
+                  style={styles.forgetButton}
+                  onPress={confirmForgetProjectMemory}
+                  disabled={deleting}
+                >
+                  {deleting ? (
+                    <ActivityIndicator size="small" color={theme.danger} />
+                  ) : (
+                    <>
+                      <Ionicons name="trash-outline" size={16} color={theme.danger} />
+                      <Text style={styles.forgetButtonText}>Esquecer memórias deste projeto</Text>
+                    </>
+                  )}
+                </TouchableOpacity>
+              )}
+            </View>
           </ScrollView>
         )}
 
@@ -518,12 +569,31 @@ function createStyles(theme: Theme) {
       lineHeight: 20,
       color: theme.text,
     },
+    actionButtonsContainer: {
+      gap: 8,
+      marginTop: 12,
+    },
+    backfillButton: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 6,
+      paddingVertical: 12,
+      borderRadius: 10,
+      backgroundColor: theme.bgAlt,
+      borderWidth: StyleSheet.hairlineWidth,
+      borderColor: theme.border,
+    },
+    backfillButtonText: {
+      fontSize: 14,
+      fontWeight: '600',
+      color: theme.accent,
+    },
     forgetButton: {
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'center',
       gap: 6,
-      marginTop: 12,
       paddingVertical: 12,
       borderRadius: 10,
       backgroundColor: theme.dangerBg,

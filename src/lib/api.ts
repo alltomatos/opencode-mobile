@@ -1299,6 +1299,29 @@ export async function promoteMemory(
   return (await res.json()) as { path: string };
 }
 
+export type BackfillMemoryResult = {
+  scannedSessions: number;
+  extractedMemories: number;
+  projectMemoriesAdded: number;
+  globalMemoriesAdded: number;
+};
+
+export async function backfillMemory(
+  server: ServerConnection,
+  token: string,
+  input?: { directory?: string; sessionID?: string }
+): Promise<BackfillMemoryResult> {
+  const res = await fetch(authedUrl(server, token, '/memory/backfill'), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(input ?? {}),
+  });
+  if (!res.ok) {
+    throw new Error(`POST /memory/backfill falhou: ${await errorDetail(res)}`);
+  }
+  return (await res.json()) as BackfillMemoryResult;
+}
+
 // Parser mínimo de Server-Sent Events sobre o streaming reader do
 // `expo/fetch` (docs.expo.dev/versions/latest/sdk/expo — seção
 // "Streaming Fetch"). Sem lib externa: são poucas linhas e evita mais
