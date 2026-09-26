@@ -7,7 +7,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { EmptyState } from '../../../../src/components/ui/EmptyState';
 import { Row } from '../../../../src/components/ui/Row';
 import { Section } from '../../../../src/components/ui/Section';
-import { listAllProjects, ProjectFolder } from '../../../../src/lib/api';
+import { listAllProjects, ProjectFolder, subscribeEvents } from '../../../../src/lib/api';
 import { getServerToken, listServers, ServerConnection } from '../../../../src/lib/servers';
 import { Theme, useTheme } from '../../../../src/lib/theme';
 
@@ -42,7 +42,33 @@ export default function ProjectListScreen() {
 
   useEffect(() => {
     if (!server || !token) return;
+    let cancelled = false;
     loadProjects(server, token);
+
+    const controller = new AbortController();
+    (async () => {
+      try {
+        for await (const event of subscribeEvents(server, token, controller.signal)) {
+          if (cancelled) return;
+          // Sincroniza em tempo real sempre que um projeto for atualizado/criado
+          // ou uma sessão for criada/removida no servidor.
+          if (
+            event.type === 'project.updated' ||
+            event.type === 'session.created' ||
+            event.type === 'session.deleted'
+          ) {
+            loadProjects(server, token);
+          }
+        }
+      } catch {
+        // SSE desconectado / reconectará no próximo ciclo de foco ou mount
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+      controller.abort();
+    };
   }, [server, token]);
 
   // Projetos criados no desktop (ou em qualquer outro cliente) só
