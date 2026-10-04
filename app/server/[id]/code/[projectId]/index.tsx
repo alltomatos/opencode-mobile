@@ -20,7 +20,7 @@ import {
   SessionStatus,
   subscribeEvents,
 } from '../../../../../src/lib/api';
-import { basename } from '../../../../../src/lib/paths';
+import { basename, normalizePathKey } from '../../../../../src/lib/paths';
 import { getServerToken, listServers, ServerConnection } from '../../../../../src/lib/servers';
 import { Theme, useTheme } from '../../../../../src/lib/theme';
 
@@ -72,7 +72,7 @@ export default function ProjectSessionsScreen() {
 
     let cancelled = false;
     listSessions(server, token, directory)
-      .then((data) => !cancelled && setSessions(data.filter((s) => s.directory === directory && !s.parentID)))
+      .then((data) => !cancelled && setSessions(data.filter((s) => normalizePathKey(s.directory) === normalizePathKey(directory) && !s.parentID)))
       .catch((e) => {
         if (!cancelled) {
           setError(e instanceof Error ? e.message : 'Falha ao listar sessões.');
@@ -104,7 +104,7 @@ export default function ProjectSessionsScreen() {
           console.log('[debug] evento SSE ->', event.type);
           if (event.type === 'session.created' || event.type === 'session.updated') {
             const info = (event as { properties: { info: Session } }).properties.info;
-            if (info.directory !== directory || info.parentID) continue;
+            if (normalizePathKey(info.directory) !== normalizePathKey(directory) || info.parentID) continue;
             setSessions((prev) => {
               const rest = (prev ?? []).filter((s) => s.id !== info.id);
               return [info, ...rest];

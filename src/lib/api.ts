@@ -759,10 +759,18 @@ export async function listAllProjects(server: ServerConnection, token: string): 
 // packages/opencode/src/server/routes/instance/httpapi/handlers/session.ts
 // (list) + packages/opencode/src/session/session.ts (list faz
 // listByProject com ctx.project.id, escopado pelo directory resolvido).
-export async function listSessions(server: ServerConnection, token: string, directory: string): Promise<Session[]> {
+export async function listSessions(
+  server: ServerConnection,
+  token: string,
+  directory: string,
+  roots: boolean = true
+): Promise<Session[]> {
   const url = new URL('/session', server.url);
   url.searchParams.set('auth_token', token);
   url.searchParams.set('directory', directory);
+  if (roots) {
+    url.searchParams.set('roots', 'true');
+  }
   const res = await fetch(url.toString());
   if (!res.ok) {
     throw new Error(`GET /session falhou: ${res.status}`);
@@ -1036,16 +1044,39 @@ export async function deleteProjectFolder(
   await runManagedShell(server, token, `rm -rf "${directory}"`);
 }
 
-export async function listPermissions(server: ServerConnection, token: string): Promise<PermissionRequest[]> {
-  const res = await fetch(authedUrl(server, token, '/permission'));
+export async function abortSession(server: ServerConnection, token: string, sessionID: string): Promise<void> {
+  const res = await fetch(authedUrl(server, token, `/session/${sessionID}/abort`), {
+    method: 'POST',
+  });
+  if (!res.ok) {
+    throw new Error(`POST /session/${sessionID}/abort falhou: ${await errorDetail(res)}`);
+  }
+}
+
+export async function listPermissions(
+  server: ServerConnection,
+  token: string,
+  directory?: string
+): Promise<PermissionRequest[]> {
+  const url = new URL('/permission', server.url);
+  url.searchParams.set('auth_token', token);
+  if (directory) url.searchParams.set('directory', directory);
+  const res = await fetch(url.toString());
   if (!res.ok) {
     throw new Error(`GET /permission falhou: ${res.status}`);
   }
   return (await res.json()) as PermissionRequest[];
 }
 
-export async function listQuestions(server: ServerConnection, token: string): Promise<QuestionRequest[]> {
-  const res = await fetch(authedUrl(server, token, '/question'));
+export async function listQuestions(
+  server: ServerConnection,
+  token: string,
+  directory?: string
+): Promise<QuestionRequest[]> {
+  const url = new URL('/question', server.url);
+  url.searchParams.set('auth_token', token);
+  if (directory) url.searchParams.set('directory', directory);
+  const res = await fetch(url.toString());
   if (!res.ok) {
     throw new Error(`GET /question falhou: ${res.status}`);
   }

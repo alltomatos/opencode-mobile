@@ -2,6 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { Link, Stack, useLocalSearchParams } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
 import {
+  ActivityIndicator,
   AppState,
   FlatList,
   Image,
@@ -19,6 +20,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import {
+  abortSession,
   Combo,
   Command,
   FilePart,
@@ -199,18 +201,6 @@ export default function SessionChatScreen() {
   const [showStatsModal, setShowStatsModal] = useState(false);
   const [draft, setDraft] = useState('');
   const [sending, setSending] = useState(false);
-  // Fila de mensagens digitadas enquanto uma anterior ainda está em
-  // andamento — igual ao "followup: queue" do desktop (ver
-  // packages/app/src/pages/session.tsx + session-followup-queue.ts):
-  // é 100% client-side, o servidor rejeita um segundo prompt na mesma
-  // sessão enquanto ela está busy (Session.BusyError), então quem
-  // segura a fila e dispara uma a uma é o app. Usa ref (não só state)
-  // porque o loop de drenagem roda dentro de uma função async e
-  // precisa ler o valor mais recente sem depender de closures presas
-  // ao render em que a função foi criada.
-  type QueuedPrompt = { text: string; atts?: ImageAttachment[] };
-  const queueRef = useRef<QueuedPrompt[]>([]);
-  const [queueCount, setQueueCount] = useState(0);
   const [attachments, setAttachments] = useState<ImageAttachment[]>([]);
   const [showImagePickerOptions, setShowImagePickerOptions] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -297,27 +287,12 @@ export default function SessionChatScreen() {
       listMessages(activeServer, activeToken, sessionId)
         .then((data) => !cancelled && setMessages(data))
         .catch(() => {});
-      // Permissão/pergunta pedidas bem na hora em que a SSE caiu eram
-      // perdidas pra sempre — só as mensagens eram re-sincronizadas na
-      // reconexão, então um permission.asked/question.asked que chegou
-      // durante a queda nunca era visto aqui, mesmo continuando pendente
-      // de verdade no servidor (reportado ao vivo: pergunta aparecia
-      // certinho no desktop, sem nada correspondente no mobile). Mesma
-      // lógica de mão dupla das mensagens, aplicada aqui também.
-      listPermissions(activeServer, activeToken)
+      listPermissions(activeServer, activeToken, directory)
         .then((all) => !cancelled && setPermissionQueue(all.filter((p) => p.sessionID === sessionId)))
         .catch(() => {});
-      listQuestions(activeServer, activeToken)
+      listQuestions(activeServer, activeToken, directory)
         .then((all) => !cancelled && setQuestionQueue(all.filter((q) => q.sessionID === sessionId)))
         .catch(() => {});
-      // Um turno enviado por prompt_async pode ter começado E terminado
-      // inteiro enquanto a SSE estava caída (app minimizado) — sem
-      // nenhum evento busy/idle passando por aqui nesse meio tempo, quem
-      // está esperando (dispatchText) travaria pra sempre. O
-      // listMessages acima já traz o resultado final; libera quem
-      // esperava assim que reconecta, mesmo que o turno ainda esteja
-      // rodando de verdade (nesse caso raro, os eventos ao vivo que
-      // vierem depois continuam atualizando `messages` normalmente).
       if (turnWaiterRef.current) {
         const waiter = turnWaiterRef.current;
         turnWaiterRef.current = null;
@@ -332,12 +307,6 @@ export default function SessionChatScreen() {
         if (cancelled) return;
         setSessionData(data);
         setSessionTitle(data.title);
-        // Sincroniza com o que essa sessão usou por último em QUALQUER
-        // cliente (desktop, CLI, outro celular) — session.agent/model é
-        // gravado pelo servidor a cada prompt (Session.setAgentModel),
-        // então é a fonte de verdade real, ao contrário do cache local
-        // por projeto (getProjectModel) usado só como fallback pra
-        // sessão nova, sem histórico nenhum ainda.
         if (data.model) {
           setModel({ providerID: data.model.providerID, modelID: data.model.id });
         }
@@ -351,10 +320,10 @@ export default function SessionChatScreen() {
         }
       })
       .catch(() => {});
-    listPermissions(server, token)
+    listPermissions(server, token, directory)
       .then((all) => !cancelled && setPermissionQueue(all.filter((p) => p.sessionID === sessionId)))
       .catch(() => {});
-    listQuestions(server, token)
+    listQuestions(server, token, directory)
       .then((all) => !cancelled && setQuestionQueue(all.filter((q) => q.sessionID === sessionId)))
       .catch(() => {});
     listChildren(server, token, sessionId)
@@ -467,10 +436,24 @@ export default function SessionChatScreen() {
               projectId,
               sessionId,
             });
-          } else if (event.type === 'permission.replied') {
+          } else if (event.type === 'permission.replied' || event.type === 'permission.v2.replied') {
             const { requestID } = (event as { properties: { requestID: string } }).properties;
             setPermissionQueue((prev) => prev.filter((p) => p.id !== requestID));
-          } else if (event.type === 'question.asked') {
+          } else if (event.type === 'permission.asked' || event.type === 'permission.v2.asked') {
+            const req = (event as { properties: PermissionRequest }).properties;
+            if (req.sessionID !== sessionId) continue;
+            if (shouldAutoApprove(modeRef.current, req.permission)) {
+              replyPermission(server, token, req.id, 'always').catch(() => {});
+              continue;
+            }
+            setPermissionQueue((prev) => (prev.some((p) => p.id === req.id) ? prev : [...prev, req]));
+            notifyPermissionAsked(settingsRef.current, req.permission, {
+              url: sessionRoute,
+              serverId: id,
+              projectId,
+              sessionId,
+            });
+          } else if (event.type === 'question.asked' || event.type === 'question.v2.asked') {
             const req = (event as { properties: QuestionRequest }).properties;
             if (req.sessionID !== sessionId) continue;
             setQuestionQueue((prev) => (prev.some((q) => q.id === req.id) ? prev : [...prev, req]));
@@ -480,7 +463,12 @@ export default function SessionChatScreen() {
               projectId,
               sessionId,
             });
-          } else if (event.type === 'question.replied' || event.type === 'question.rejected') {
+          } else if (
+            event.type === 'question.replied' ||
+            event.type === 'question.rejected' ||
+            event.type === 'question.v2.replied' ||
+            event.type === 'question.v2.rejected'
+          ) {
             const { requestID } = (event as { properties: { requestID: string } }).properties;
             setQuestionQueue((prev) => prev.filter((q) => q.id !== requestID));
           } else if (event.type === 'session.status') {
@@ -630,21 +618,23 @@ export default function SessionChatScreen() {
     setAttachments((prev) => prev.filter((_, i) => i !== index));
   }
 
-  function enqueue(item: QueuedPrompt) {
-    queueRef.current = [...queueRef.current, item];
-    setQueueCount(queueRef.current.length);
+  async function handleAbort() {
+    if (!server || !token) return;
+    try {
+      await abortSession(server, token, sessionId);
+      if (turnWaiterRef.current) {
+        const waiter = turnWaiterRef.current;
+        turnWaiterRef.current = null;
+        waiter.resolve();
+      }
+      setSending(false);
+      untrackActiveSession(sessionId);
+    } catch (e) {
+      const message = e instanceof Error ? e.message : 'Falha ao abortar sessão.';
+      setError(message);
+    }
   }
 
-  function dequeue(): QueuedPrompt | undefined {
-    const [next, ...rest] = queueRef.current;
-    queueRef.current = rest;
-    setQueueCount(rest.length);
-    return next;
-  }
-
-  // Só a chamada de rede — sem tocar em `sending`/draft/fila, isso é
-  // responsabilidade de quem chama (drainQueue), pra poder encadear
-  // vários envios em sequência sem os efeitos colaterais duplicarem.
   async function dispatchCommand(name: string, args: string) {
     if (!server || !token) return;
     setError(null);
@@ -662,11 +652,6 @@ export default function SessionChatScreen() {
   async function dispatchText(text: string, atts?: ImageAttachment[]) {
     if (!server || !token) return;
     setError(null);
-    // Eco otimista: mostra a mensagem do usuário na hora, sem esperar
-    // o POST síncrono voltar. Se a rede cair no meio do caminho (visto
-    // ao vivo: ConnectException/conexão instável), o texto digitado
-    // não desaparece da tela — só o listMessages() do sucesso substitui
-    // esse placeholder pelo dado real do servidor.
     const optimisticID = `optimistic-${Date.now()}`;
     const optimisticParts: Part[] = [];
     if (atts && atts.length > 0) {
@@ -699,12 +684,6 @@ export default function SessionChatScreen() {
       if (server) {
         trackActiveSession(server, token, id, projectId, sessionId, sessionTitle ?? 'Sessão');
       }
-      // prompt_async volta na hora — o turno roda no servidor
-      // desacoplado desta conexão (ver comentário em sendPromptAsync),
-      // então fechar o app no meio não interrompe mais o agente. Espera
-      // o ciclo busy→idle via SSE (turnWaiterRef) pra saber quando o
-      // turno de verdade terminou antes de puxar o histórico final e
-      // liberar a próxima mensagem da fila.
       await sendPromptAsync(server, token, sessionId, text, MODE_AGENT[mode], model ?? undefined, atts);
 
       let pollInterval: ReturnType<typeof setInterval> | null = null;
@@ -756,6 +735,38 @@ export default function SessionChatScreen() {
       ]);
       setMessages(fresh);
       setSessionTitle(session.title);
+
+      let lastSnippet: string | undefined;
+      try {
+        if (fresh) {
+          for (let i = fresh.length - 1; i >= 0; i--) {
+            const m = fresh[i];
+            if (m.info?.role === 'assistant' && m.parts) {
+              const textParts: string[] = [];
+              for (const p of m.parts) {
+                if (p.type === 'text') {
+                  const tPart = p as { text?: string; synthetic?: boolean };
+                  if (!tPart.synthetic && tPart.text?.trim()) {
+                    textParts.push(tPart.text.trim());
+                  }
+                }
+              }
+              if (textParts.length > 0) {
+                const full = textParts.join('\n');
+                lastSnippet = full.length > 250 ? full.slice(0, 247) + '...' : full;
+                break;
+              }
+            }
+          }
+        }
+      } catch {}
+
+      notifyAgentDone(settings, session.title ?? 'Sessão', lastSnippet, {
+        url: sessionRoute,
+        serverId: id,
+        projectId,
+        sessionId,
+      });
     } catch (e) {
       const message = e instanceof Error ? e.message : 'Falha ao enviar mensagem.';
       setError(message);
@@ -768,88 +779,27 @@ export default function SessionChatScreen() {
     }
   }
 
-  // "/nome args" roda via POST /session/:id/command, não como texto —
-  // /model digitado como mensagem normal só faz o assistente
-  // *explicar* o comando (confirmado ao testar), não executá-lo.
-  async function dispatchOne(item: QueuedPrompt) {
-    const { text, atts } = item;
-    if (text.startsWith('/')) {
-      const [name, ...rest] = text.slice(1).split(' ');
-      if (commands.some((c) => c.name === name)) {
-        await dispatchCommand(name, rest.join(' '));
-        return;
-      }
-    }
-    await dispatchText(text, atts);
-  }
-
-  // O servidor rejeita um segundo prompt na mesma sessão enquanto ela
-  // está busy — só dá pra ter UM envio de verdade em voo por vez. Em
-  // vez de travar o composer nesse meio tempo (o que forçava o
-  // usuário a sair e voltar da tela pra "destravar", como reportado),
-  // essa função vira um loop que drena a fila uma mensagem por vez,
-  // igual ao Claude Code: pode digitar e mandar quantas quiser
-  // enquanto a anterior ainda está rodando.
-  async function drainQueue(first: QueuedPrompt) {
-    setSending(true);
-    let current: QueuedPrompt | undefined = first;
-    while (current !== undefined) {
-      await dispatchOne(current);
-      current = dequeue();
-    }
-    setSending(false);
-    untrackActiveSession(sessionId);
-    // Só notifica quando a fila inteira esvaziou — se ainda tem
-    // mensagem enfileirada, o usuário sabe que o app continua
-    // trabalhando (não faz sentido notificar "terminei" no meio).
-    let lastSnippet: string | undefined;
-    try {
-      if (messages) {
-        for (let i = messages.length - 1; i >= 0; i--) {
-          const m = messages[i];
-          if (m.info?.role === 'assistant' && m.parts) {
-            const textParts: string[] = [];
-            for (const p of m.parts) {
-              if (p.type === 'text') {
-                const tPart = p as { text?: string; synthetic?: boolean };
-                if (!tPart.synthetic && tPart.text?.trim()) {
-                  textParts.push(tPart.text.trim());
-                }
-              }
-            }
-            if (textParts.length > 0) {
-              const full = textParts.join('\n');
-              lastSnippet = full.length > 250 ? full.slice(0, 247) + '...' : full;
-              break;
-            }
-          }
-        }
-      }
-    } catch {}
-
-    notifyAgentDone(settings, sessionTitle ?? 'Sessão', lastSnippet, {
-      url: sessionRoute,
-      serverId: id,
-      projectId,
-      sessionId,
-    });
-  }
-
   async function handleSend() {
     const text = draft.trim();
     const atts = [...attachments];
-    if ((!text && atts.length === 0) || !server || !token) return;
+    if ((!text && atts.length === 0) || !server || !token || sending) return;
     setDraft('');
     setAttachments([]);
-    // Mandar mensagem sempre pula pro final, mesmo se o usuário estava
-    // lendo histórico mais acima — é o comportamento esperado de chat.
     nearBottomRef.current = true;
-    const item: QueuedPrompt = { text, atts };
-    if (sending) {
-      enqueue(item);
-      return;
+    setSending(true);
+    try {
+      if (text.startsWith('/')) {
+        const [name, ...rest] = text.slice(1).split(' ');
+        if (commands.some((c) => c.name === name)) {
+          await dispatchCommand(name, rest.join(' '));
+          return;
+        }
+      }
+      await dispatchText(text, atts);
+    } finally {
+      setSending(false);
+      untrackActiveSession(sessionId);
     }
-    await drainQueue(item);
   }
 
   async function handlePermissionReply(req: PermissionRequest, reply: 'once' | 'always' | 'reject') {
@@ -1081,7 +1031,13 @@ export default function SessionChatScreen() {
 
       {pendingPermission && (
         <View style={styles.askCard}>
-          <Text style={styles.askTitle}>Permissão: {pendingPermission.permission}</Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+            <Ionicons name="shield-checkmark-outline" size={18} color={theme.accent} />
+            <Text style={styles.askTitle}>Permissão necessária</Text>
+          </View>
+          <Text style={[styles.askSubtitle, { color: theme.text, fontWeight: '600' }]}>
+            {pendingPermission.permission}
+          </Text>
           {pendingPermission.patterns.length > 0 && (
             <Text style={styles.askSubtitle}>{pendingPermission.patterns.join(', ')}</Text>
           )}
@@ -1091,21 +1047,33 @@ export default function SessionChatScreen() {
               disabled={respondingID === pendingPermission.id}
               onPress={() => handlePermissionReply(pendingPermission, 'reject')}
             >
-              <Text style={styles.askButtonTextReject}>Rejeitar</Text>
+              {respondingID === pendingPermission.id ? (
+                <ActivityIndicator size="small" color={theme.danger} />
+              ) : (
+                <Text style={styles.askButtonTextReject}>Rejeitar</Text>
+              )}
             </TouchableOpacity>
             <TouchableOpacity
               style={styles.askButton}
               disabled={respondingID === pendingPermission.id}
               onPress={() => handlePermissionReply(pendingPermission, 'once')}
             >
-              <Text style={styles.askButtonText}>Uma vez</Text>
+              {respondingID === pendingPermission.id ? (
+                <ActivityIndicator size="small" color={theme.accent} />
+              ) : (
+                <Text style={styles.askButtonText}>Uma vez</Text>
+              )}
             </TouchableOpacity>
             <TouchableOpacity
-              style={styles.askButton}
+              style={[styles.askButton, { backgroundColor: theme.accent }]}
               disabled={respondingID === pendingPermission.id}
               onPress={() => handlePermissionReply(pendingPermission, 'always')}
             >
-              <Text style={styles.askButtonText}>Sempre</Text>
+              {respondingID === pendingPermission.id ? (
+                <ActivityIndicator size="small" color={theme.accentText} />
+              ) : (
+                <Text style={[styles.askButtonText, { color: theme.accentText }]}>Sempre</Text>
+              )}
             </TouchableOpacity>
           </View>
         </View>
@@ -1113,21 +1081,36 @@ export default function SessionChatScreen() {
 
       {!pendingPermission && pendingQuestion && (
         <View style={styles.askCard}>
-          <Text style={styles.askTitle}>{pendingQuestion.questions[0].header}</Text>
-          <Text style={styles.askSubtitle}>{pendingQuestion.questions[0].question}</Text>
-          <View style={styles.askOptions}>
-            {pendingQuestion.questions[0].options.map((opt) => (
-              <TouchableOpacity
-                key={opt.label}
-                style={styles.askOption}
-                disabled={respondingID === pendingQuestion.id}
-                onPress={() => handleQuestionAnswer(pendingQuestion, opt.label)}
-              >
-                <Text style={styles.askOptionLabel}>{opt.label}</Text>
-                <Text style={styles.askOptionDescription}>{opt.description}</Text>
-              </TouchableOpacity>
-            ))}
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+            <Ionicons name="help-circle-outline" size={18} color={theme.accent} />
+            <Text style={styles.askTitle}>Pergunta do agente</Text>
           </View>
+          {(pendingQuestion.questions ?? []).map((q, qIdx) => (
+            <View key={qIdx} style={{ gap: 6, marginTop: 4 }}>
+              {!!q.header && <Text style={[styles.askTitle, { fontSize: 15 }]}>{q.header}</Text>}
+              {!!q.question && <Text style={styles.askSubtitle}>{q.question}</Text>}
+              <View style={styles.askOptions}>
+                {(q.options ?? []).map((opt) => (
+                  <TouchableOpacity
+                    key={opt.label}
+                    style={styles.askOption}
+                    disabled={respondingID === pendingQuestion.id}
+                    onPress={() => handleQuestionAnswer(pendingQuestion, opt.label)}
+                  >
+                    <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                      <Text style={styles.askOptionLabel}>{opt.label}</Text>
+                      {respondingID === pendingQuestion.id && (
+                        <ActivityIndicator size="small" color={theme.accent} />
+                      )}
+                    </View>
+                    {!!opt.description && (
+                      <Text style={styles.askOptionDescription}>{opt.description}</Text>
+                    )}
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </View>
+          ))}
         </View>
       )}
 
@@ -1151,12 +1134,6 @@ export default function SessionChatScreen() {
             </TouchableOpacity>
           ))}
         </ScrollView>
-      )}
-
-      {queueCount > 0 && (
-        <Text style={styles.queueHint}>
-          {queueCount === 1 ? '1 mensagem na fila…' : `${queueCount} mensagens na fila…`}
-        </Text>
       )}
 
       {attachments.length > 0 && (
@@ -1188,20 +1165,25 @@ export default function SessionChatScreen() {
           onChangeText={setDraft}
           multiline
         />
-        {/* Não desativa enquanto `sending` — o servidor só aceita um
-            prompt em voo por sessão, mas o app enfileira o resto e
-            dispara em sequência (drainQueue), então dá pra continuar
-            mandando mensagem com a anterior ainda rodando, igual ao
-            Claude Code. Antes disso o botão ficava travado até a
-            resposta voltar, e só "destravava" se o usuário saísse e
-            voltasse da tela — reportado como bug. */}
-        <TouchableOpacity
-          style={[styles.sendButton, (!draft.trim() && attachments.length === 0) && styles.sendButtonDisabled]}
-          onPress={handleSend}
-          disabled={!draft.trim() && attachments.length === 0}
-        >
-          <Text style={styles.sendButtonText}>{sending ? 'Enfileirar' : 'Enviar'}</Text>
-        </TouchableOpacity>
+        {sending ? (
+          <TouchableOpacity
+            style={[styles.sendButton, styles.abortButton]}
+            onPress={handleAbort}
+            accessibilityLabel="Abortar resposta"
+          >
+            <Ionicons name="stop" size={16} color="#FFFFFF" style={{ marginRight: 4 }} />
+            <Text style={styles.sendButtonText}>Parar</Text>
+          </TouchableOpacity>
+        ) : (
+          <TouchableOpacity
+            style={[styles.sendButton, (!draft.trim() && attachments.length === 0) && styles.sendButtonDisabled]}
+            onPress={handleSend}
+            disabled={!draft.trim() && attachments.length === 0}
+            accessibilityLabel="Enviar mensagem"
+          >
+            <Text style={styles.sendButtonText}>Enviar</Text>
+          </TouchableOpacity>
+        )}
       </View>
 
       <View style={[styles.dropdownRow, { paddingBottom: keyboardVisible ? 8 : insets.bottom + 8 }]}>
@@ -1874,6 +1856,12 @@ function createStyles(theme: Theme) {
       backgroundColor: theme.accent,
       borderRadius: 19,
       paddingHorizontal: 16,
+    },
+    abortButton: {
+      backgroundColor: theme.danger,
+      flexDirection: 'row',
+      alignItems: 'center',
+      paddingHorizontal: 12,
     },
     sendButtonDisabled: {
       backgroundColor: theme.accentDim,
