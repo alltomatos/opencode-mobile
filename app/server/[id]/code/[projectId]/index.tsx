@@ -22,6 +22,7 @@ import {
 } from '../../../../../src/lib/api';
 import { basename, normalizePathKey } from '../../../../../src/lib/paths';
 import { getServerToken, listServers, ServerConnection } from '../../../../../src/lib/servers';
+import { getProjectModel } from '../../../../../src/lib/settings';
 import { Theme, useTheme } from '../../../../../src/lib/theme';
 
 export default function ProjectSessionsScreen() {
@@ -141,7 +142,9 @@ export default function ProjectSessionsScreen() {
     setCreating(true);
     setError(null);
     try {
-      const session = await createSession(server, token, directory);
+      const modelKey = `${id}:${directory}:model`;
+      const savedModel = await getProjectModel(modelKey);
+      const session = await createSession(server, token, directory, undefined, savedModel ?? undefined);
       router.push(`/server/${id}/code/${encodedProjectId}/session/${session.id}`);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Falha ao criar sessão.');

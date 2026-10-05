@@ -802,15 +802,19 @@ export async function createSession(
   server: ServerConnection,
   token: string,
   directory: string,
-  agent?: string
+  agent?: string,
+  model?: SelectedModel
 ): Promise<Session> {
   const url = new URL('/session', server.url);
   url.searchParams.set('auth_token', token);
   url.searchParams.set('directory', directory);
+  const body: Record<string, unknown> = {};
+  if (agent) body.agent = agent;
+  if (model) body.model = { id: model.modelID, providerID: model.providerID };
   const res = await fetch(url.toString(), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(agent ? { agent } : {}),
+    body: JSON.stringify(body),
   });
   if (!res.ok) {
     throw new Error(`POST /session falhou: ${await errorDetail(res)}`);
