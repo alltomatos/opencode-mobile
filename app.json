@@ -2,14 +2,14 @@
   "expo": {
     "name": "OpenCode Mobile",
     "slug": "opencode-mobile",
-    "version": "0.3.4",
+    "version": "0.3.5",
     "orientation": "portrait",
     "scheme": "opencode-mobile",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "automatic",
     "ios": {
       "supportsTablet": true,
-      "buildNumber": "9",
+      "buildNumber": "10",
       "bundleIdentifier": "com.alltomatos.opencodemobile",
       "infoPlist": {
         "UIBackgroundModes": [
@@ -21,7 +21,7 @@
     },
     "android": {
       "package": "com.alltomatos.opencodemobile",
-      "versionCode": 9,
+      "versionCode": 10,
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
         "foregroundImage": "./assets/android-icon-foreground.png",
