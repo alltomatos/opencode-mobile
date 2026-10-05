@@ -369,12 +369,24 @@ export async function runCommand(
   token: string,
   sessionID: string,
   command: string,
-  args: string
+  args: string,
+  agent?: string,
+  model?: SelectedModel
 ): Promise<MessageWithParts> {
+  const modelParam = model
+    ? model.providerID === 'combo'
+      ? `combo:${model.modelID}`
+      : `${model.providerID}/${model.modelID}`
+    : undefined;
   const res = await fetch(authedUrl(server, token, `/session/${sessionID}/command`), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ command, arguments: args }),
+    body: JSON.stringify({
+      command,
+      arguments: args,
+      ...(agent ? { agent } : {}),
+      ...(modelParam ? { model: modelParam } : {}),
+    }),
   });
   if (!res.ok) {
     throw new Error(`POST /session/${sessionID}/command falhou: ${await errorDetail(res)}`);

@@ -160,13 +160,27 @@ async function withRetry<T>(fn: () => Promise<T>, attempts = 3, delayMs = 1000):
 // FlatList já retorna null nesse caso, então essa função só precisa
 // devolver string vazia.
 function textOf(message: MessageWithParts): string {
-  return message.parts
+  const visible = message.parts
     .filter(
       (p): p is MessageWithParts['parts'][number] & { type: 'text'; text: string; synthetic?: boolean } =>
         p.type === 'text' && !(p as { synthetic?: boolean }).synthetic
     )
     .map((p) => p.text)
     .join('');
+
+  if (visible) return visible;
+
+  // Se for mensagem de usuário originada por comando/skill (onde o texto do prompt é synthetic):
+  if (message.info.role === 'user') {
+    const subtask = message.parts.find((p) => p.type === 'subtask') as
+      | { command?: string; description?: string }
+      | undefined;
+    if (subtask?.command) {
+      return `/${subtask.command}${subtask.description ? ' ' + subtask.description : ''}`;
+    }
+  }
+
+  return '';
 }
 
 export default function SessionChatScreen() {
@@ -632,14 +646,35 @@ export default function SessionChatScreen() {
   async function dispatchCommand(name: string, args: string) {
     if (!server || !token) return;
     setError(null);
+    const commandText = `/${name}${args.trim() ? ' ' + args.trim() : ''}`;
+    const optimisticID = `optimistic-${Date.now()}`;
+    setMessages((prev) => [
+      ...(prev ?? []),
+      {
+        info: { id: optimisticID, sessionID: sessionId, role: 'user', time: { created: Date.now() } },
+        parts: [{ id: `${optimisticID}-text`, messageID: optimisticID, type: 'text', text: commandText }],
+      },
+    ]);
     try {
-      await runCommand(server, token, sessionId, name, args);
-      const fresh = await listMessages(server, token, sessionId);
+      if (server) {
+        trackActiveSession(server, token, id, projectId, sessionId, sessionTitle ?? 'Sessão');
+      }
+      await runCommand(server, token, sessionId, name, args, MODE_AGENT[mode], model ?? undefined);
+      const [fresh, session] = await Promise.all([
+        listMessages(server, token, sessionId),
+        getSession(server, token, sessionId),
+      ]);
       setMessages(fresh);
+      setSessionTitle(session.title);
     } catch (e) {
       const message = e instanceof Error ? e.message : 'Falha ao rodar comando.';
       setError(message);
-      notifyError(settings, message);
+      notifyError(settings, message, {
+        url: sessionRoute,
+        serverId: id,
+        projectId,
+        sessionId,
+      });
     }
   }
 
