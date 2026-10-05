@@ -782,7 +782,7 @@ export default function SessionChatScreen() {
   async function handleSend() {
     const text = draft.trim();
     const atts = [...attachments];
-    if ((!text && atts.length === 0) || !server || !token || sending) return;
+    if ((!text && atts.length === 0) || !server || !token) return;
     setDraft('');
     setAttachments([]);
     nearBottomRef.current = true;
@@ -1165,25 +1165,34 @@ export default function SessionChatScreen() {
           onChangeText={setDraft}
           multiline
         />
-        {sending ? (
-          <TouchableOpacity
-            style={[styles.sendButton, styles.abortButton]}
-            onPress={handleAbort}
-            accessibilityLabel="Abortar resposta"
-          >
-            <Ionicons name="stop" size={16} color="#FFFFFF" style={{ marginRight: 4 }} />
-            <Text style={styles.sendButtonText}>Parar</Text>
-          </TouchableOpacity>
-        ) : (
-          <TouchableOpacity
-            style={[styles.sendButton, (!draft.trim() && attachments.length === 0) && styles.sendButtonDisabled]}
-            onPress={handleSend}
-            disabled={!draft.trim() && attachments.length === 0}
-            accessibilityLabel="Enviar mensagem"
-          >
-            <Text style={styles.sendButtonText}>Enviar</Text>
-          </TouchableOpacity>
-        )}
+        {(() => {
+          const hasContent = draft.trim().length > 0 || attachments.length > 0;
+          const isBusy = sending || sessionStatus?.type === 'busy';
+
+          if (isBusy && !hasContent) {
+            return (
+              <TouchableOpacity
+                style={[styles.sendButton, styles.abortButton]}
+                onPress={handleAbort}
+                accessibilityLabel="Abortar resposta"
+              >
+                <Ionicons name="stop" size={16} color="#FFFFFF" style={{ marginRight: 4 }} />
+                <Text style={styles.sendButtonText}>Parar</Text>
+              </TouchableOpacity>
+            );
+          }
+
+          return (
+            <TouchableOpacity
+              style={[styles.sendButton, !hasContent && styles.sendButtonDisabled]}
+              onPress={handleSend}
+              disabled={!hasContent}
+              accessibilityLabel="Enviar mensagem"
+            >
+              <Text style={styles.sendButtonText}>Enviar</Text>
+            </TouchableOpacity>
+          );
+        })()}
       </View>
 
       <View style={[styles.dropdownRow, { paddingBottom: keyboardVisible ? 8 : insets.bottom + 8 }]}>
