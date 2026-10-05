@@ -223,6 +223,57 @@ export type SelectedModel = {
   modelID: string;
 };
 
+// Prioriza o provedor padrão oficial (OpenCode Zen / big-pickle) ou modelos conectados confiáveis
+export function pickDefaultModel(data: ProviderList, saved?: SelectedModel | null): SelectedModel | null {
+  if (saved) return saved;
+
+  // 1. Procura 'opencode' com 'big-pickle' ou default do opencode
+  if (data.connected.includes('opencode')) {
+    const opencodeProvider = data.all.find((p) => p.id === 'opencode');
+    if (opencodeProvider) {
+      if (opencodeProvider.models['big-pickle']) {
+        return { providerID: 'opencode', modelID: 'big-pickle' };
+      }
+      const def = data.default['opencode'];
+      if (def) return { providerID: 'opencode', modelID: def };
+      const first = Object.keys(opencodeProvider.models)[0];
+      if (first) return { providerID: 'opencode', modelID: first };
+    }
+  }
+
+  // 2. Procura qualquer provedor que tenha o modelo 'big-pickle'
+  for (const provider of data.all) {
+    if (data.connected.includes(provider.id) && provider.models['big-pickle']) {
+      return { providerID: provider.id, modelID: 'big-pickle' };
+    }
+  }
+
+  // 3. Prioriza provedores conhecidos ('opencode', 'anthropic', 'openai')
+  const priorityOrder = ['opencode', 'anthropic', 'openai'];
+  for (const pref of priorityOrder) {
+    if (data.connected.includes(pref)) {
+      const def = data.default[pref];
+      if (def) return { providerID: pref, modelID: def };
+      const p = data.all.find((item) => item.id === pref);
+      const first = p ? Object.keys(p.models)[0] : undefined;
+      if (first) return { providerID: pref, modelID: first };
+    }
+  }
+
+  // 4. Fallback: primeiro provedor conectado com modelo padrão
+  for (const connectedId of data.connected) {
+    const defaultModelID = data.default[connectedId];
+    if (defaultModelID) {
+      return { providerID: connectedId, modelID: defaultModelID };
+    }
+    const p = data.all.find((item) => item.id === connectedId);
+    const first = p ? Object.keys(p.models)[0] : undefined;
+    if (first) return { providerID: connectedId, modelID: first };
+  }
+
+  return null;
+}
+
 // GET /command — unifica comandos de skill, MCP e comandos normais
 // (source: "command"|"mcp"|"skill") num só catálogo. É o que
 // alimenta o autocomplete de "/" no composer.

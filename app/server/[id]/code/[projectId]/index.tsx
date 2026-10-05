@@ -15,7 +15,9 @@ import {
   deleteSession,
   getProjectMemoryStatus,
   getSessionStatusMap,
+  listProviders,
   listSessions,
+  pickDefaultModel,
   Session,
   SessionStatus,
   subscribeEvents,
@@ -143,8 +145,14 @@ export default function ProjectSessionsScreen() {
     setError(null);
     try {
       const modelKey = `${id}:${directory}:model`;
-      const savedModel = await getProjectModel(modelKey);
-      const session = await createSession(server, token, directory, undefined, savedModel ?? undefined);
+      let targetModel = await getProjectModel(modelKey);
+      if (!targetModel) {
+        const providers = await listProviders(server, token).catch(() => null);
+        if (providers) {
+          targetModel = pickDefaultModel(providers);
+        }
+      }
+      const session = await createSession(server, token, directory, undefined, targetModel ?? undefined);
       router.push(`/server/${id}/code/${encodedProjectId}/session/${session.id}`);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Falha ao criar sessão.');

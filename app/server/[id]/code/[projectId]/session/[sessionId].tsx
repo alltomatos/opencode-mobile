@@ -38,6 +38,7 @@ import {
   MessageWithParts,
   Part,
   PermissionRequest,
+  pickDefaultModel,
   ProviderList,
   QuestionRequest,
   ReasoningPart,
@@ -343,14 +344,7 @@ export default function SessionChatScreen() {
       .then(([data, saved]) => {
         if (cancelled) return;
         setProviders(data);
-        setModel((prev) => {
-          if (prev) return prev;
-          if (saved) return saved;
-          const firstConnected = data.connected[0];
-          const defaultModelID = firstConnected ? data.default[firstConnected] : undefined;
-          if (!firstConnected || !defaultModelID) return prev;
-          return { providerID: firstConnected, modelID: defaultModelID };
-        });
+        setModel((prev) => prev ?? pickDefaultModel(data, saved));
       })
       .catch(() => {});
 
