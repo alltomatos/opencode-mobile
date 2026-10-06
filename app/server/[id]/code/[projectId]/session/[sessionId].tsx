@@ -308,6 +308,9 @@ export default function SessionChatScreen() {
       listQuestions(activeServer, activeToken, directory)
         .then((all) => !cancelled && setQuestionQueue(all.filter((q) => q.sessionID === sessionId)))
         .catch(() => {});
+      listCommands(activeServer, activeToken, directory)
+        .then((data) => !cancelled && setCommands(data))
+        .catch(() => {});
       if (turnWaiterRef.current) {
         const waiter = turnWaiterRef.current;
         turnWaiterRef.current = null;
@@ -344,7 +347,7 @@ export default function SessionChatScreen() {
     listChildren(server, token, sessionId)
       .then((data) => !cancelled && setChildren(data))
       .catch(() => {});
-    listCommands(server, token)
+    listCommands(server, token, directory)
       .then((data) => !cancelled && setCommands(data))
       .catch(() => {});
     listCombos(server, token)
@@ -574,9 +577,20 @@ export default function SessionChatScreen() {
     setShowModePicker(false);
   }
 
+  const commandQuery = draft.startsWith('/') && !draft.includes(' ') ? draft.slice(1).toLowerCase() : null;
   const commandSuggestions =
-    draft.startsWith('/') && !draft.includes(' ')
-      ? commands.filter((c) => c.name.toLowerCase().startsWith(draft.slice(1).toLowerCase()))
+    commandQuery !== null
+      ? commands
+          .filter((c) => !commandQuery || c.name.toLowerCase().includes(commandQuery))
+          .sort((a, b) => {
+            if (!commandQuery) return a.name.localeCompare(b.name);
+            const aStarts = a.name.toLowerCase().startsWith(commandQuery);
+            const bStarts = b.name.toLowerCase().startsWith(commandQuery);
+            if (aStarts && !bStarts) return -1;
+            if (!aStarts && bStarts) return 1;
+            return a.name.localeCompare(b.name);
+          })
+          .slice(0, 25)
       : [];
 
   async function handlePickImageFromGallery() {

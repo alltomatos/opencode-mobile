@@ -353,8 +353,15 @@ export async function checkServerHealth(server: ServerConnection, token: string,
   }
 }
 
-export async function listCommands(server: ServerConnection, token: string): Promise<Command[]> {
-  const res = await fetch(authedUrl(server, token, '/command'));
+export async function listCommands(
+  server: ServerConnection,
+  token: string,
+  directory?: string
+): Promise<Command[]> {
+  const url = new URL('/command', server.url);
+  url.searchParams.set('auth_token', token);
+  if (directory) url.searchParams.set('directory', directory);
+  const res = await fetch(url.toString());
   if (!res.ok) {
     throw new Error(`GET /command falhou: ${await errorDetail(res)}`);
   }
